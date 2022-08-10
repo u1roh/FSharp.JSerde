@@ -68,19 +68,77 @@ and private serializeList obj =
 
 exception TypeMismatched of System.Type * JsonValue
 
+let (|Option|_|) (t: System.Type) =
+  if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>> then
+    Some t.GenericTypeArguments[0]
+  else
+    None
+
+let (|SingleCaseUnion|_|) (t: System.Type) =
+  if FSharpType.IsUnion (t, bindingFlags) then
+    let cases = FSharpType.GetUnionCases (t, true)
+    if cases.Length = 1 then // single case union
+      Some cases[0]
+    else None
+  else None
+
+
+
 let rec deserialize (t: System.Type) (json: JsonValue) : obj =
   let fail () = TypeMismatched (t, json) |> raise
+  // match t, json with
+  // | Option(elmType), _ -> ()
+  // | SingleCaseUnion(case), JsonValue.Array a -> ()
+
   if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>> then
     let cases = FSharpType.GetUnionCases t
     if json = JsonValue.Null then 
       FSharpValue.MakeUnion (cases[0], [||])
     else
       FSharpValue.MakeUnion (cases[1], [| deserialize t.GenericTypeArguments[0] json |])
+  elif FSharpType.IsUnion (t, bindingFlags) then
+    let cases = FSharpType.GetUnionCases (t, true)
+    if cases.Length = 1 then // single case union
+      match cases[0].GetFields(), json with
+      | [| field |], _ ->
+        FSharpValue.MakeUnion (cases[0], [| deserialize field.PropertyType json |])
+      | fields, JsonValue.Array a when fields.Length = a.Length ->
+        Array.zip fields a
+        |> Array.map (fun (field, json) -> deserialize field.PropertyType json)
+        |> fun a -> FSharpValue.MakeUnion (cases[0], a)
+      | _ -> fail()
+    else
+      match json with
+      | JsonValue.String name ->
+        cases
+        |> Array.tryFind (fun case -> case.Name = name && case.GetFields().Length = 0)
+        |> function Some case -> FSharpValue.MakeUnion (case, [||]) | _ -> fail()
+      | JsonValue.Record [| name, json |] ->
+        cases
+        |> Array.tryFind (fun case -> case.Name = name)
+        |> function
+          | Some case ->
+            match case.GetFields(), json with
+            | [| field |], _ -> FSharpValue.MakeUnion (case, [| deserialize field.PropertyType json |])
+            | fields, JsonValue.Array a when fields.Length = a.Length -> 
+              Array.zip fields a
+              |> Array.map (fun (field, json) -> deserialize field.PropertyType json)
+              |> fun a -> FSharpValue.MakeUnion (case, a)
+            | _ -> fail()
+          | _ -> fail()
+      | _ -> fail()
   else
     match json with
     | JsonValue.Null -> null
     | JsonValue.String s ->
-      if t = typeof<string> then s :> obj else fail ()
+      if t = typeof<string> then
+        s :> obj
+      elif FSharpType.IsUnion (t, bindingFlags) then
+        FSharpType.GetUnionCases (t, true)
+        |> Array.tryFind (fun case -> case.Name = s && case.GetFields().Length = 0)
+        |> function Some case -> FSharpValue.MakeUnion (case, [||]) | _ -> fail()
+      else
+        fail ()
     | JsonValue.Boolean b ->
       if t = typeof<bool> then b :> obj else fail ()
     | JsonValue.Number n ->
@@ -114,8 +172,13 @@ let rec deserialize (t: System.Type) (json: JsonValue) : obj =
           |> Array.map (fun (elmType, (_, obj)) -> deserialize elmType obj)
         FSharpValue.MakeRecord (t, values, true)
       elif FSharpType.IsUnion (t, bindingFlags) then
-        let case, fields = FSharpValue.GetUnionFields (obj, t, true)
-        if (FSharpType.GetUnionCases (t, true)).Length = 1 then // single case union
+        let cases = FSharpType.GetUnionCases (t, true)
+        if cases.Length = 1 then // single case union
+
+          // cases[0].GetFields()
+          // |> Array.map (fun field -> src |> Array.find (fst >> (=) field.)
+
+          // deserialize cases[0].GetFields()
           ()
         else
           ()
