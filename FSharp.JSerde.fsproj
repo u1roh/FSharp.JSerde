@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Serde.fs" />
+    <Compile Include="JSerde.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
