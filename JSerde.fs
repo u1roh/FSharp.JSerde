@@ -1,4 +1,4 @@
-module FSharp.Serde
+module FSharp.JSerde
 open Microsoft.FSharp.Reflection
 open FSharp.Data
 

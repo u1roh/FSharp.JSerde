@@ -1,4 +1,4 @@
-﻿open FSharp.Serde
+﻿open FSharp.JSerde
 
 // For more information see https://aka.ms/fsharp-console-apps
 printfn "Hello from F#"
