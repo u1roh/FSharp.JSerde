@@ -70,48 +70,55 @@ exception TypeMismatched of System.Type * JsonValue
 
 let rec deserialize (t: System.Type) (json: JsonValue) : obj =
   let fail () = TypeMismatched (t, json) |> raise
-  match json with
-  | JsonValue.Null -> null
-  | JsonValue.String s ->
-    if t = typeof<string> then s :> obj else fail ()
-  | JsonValue.Boolean b ->
-    if t = typeof<bool> then b :> obj else fail ()
-  | JsonValue.Number n ->
-    if    t = typeof<decimal> then n :> obj
-    elif  t = typeof<int>     then int n :> obj
-    elif  t = typeof<float>   then float n :> obj
-    else fail ()
-  | JsonValue.Float n ->
-    if    t = typeof<decimal> then n :> obj
-    elif  t = typeof<int>     then int n :> obj
-    elif  t = typeof<float>   then float n :> obj
-    else fail ()
-  | JsonValue.Array src ->
-    if t.IsArray && t.HasElementType then
-      let elmType = t.GetElementType()
-      let dst = System.Array.CreateInstance (elmType, src.Length)
-      src |> Array.iteri (fun i obj -> dst.SetValue(deserialize elmType obj, i))
-      dst :> obj
-    elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<list<_>> then
-      let elmType = t.GenericTypeArguments[0]
-      let arr = src |> Array.map (deserialize elmType)
-      let cons = t.GetMethod "Cons"
-      let empty = (t.GetProperty "Empty").GetValue null
-      Array.foldBack (fun item list -> cons.Invoke (null, [| item; list |])) arr empty
-    else fail ()
-  | JsonValue.Record src ->
-    if FSharpType.IsRecord (t, bindingFlags) then
-      let values =
-        FSharpType.GetRecordFields (t, bindingFlags)
-        |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
-        |> Array.map (fun (elmType, (_, obj)) -> deserialize elmType obj)
-      FSharpValue.MakeRecord (t, values, true)
-    elif FSharpType.IsUnion (t, bindingFlags) then
-      let case, fields = FSharpValue.GetUnionFields (obj, t, true)
-      if (FSharpType.GetUnionCases (t, true)).Length = 1 then // single case union
+  if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>> then
+    let cases = FSharpType.GetUnionCases t
+    if json = JsonValue.Null then 
+      FSharpValue.MakeUnion (cases[0], [||])
+    else
+      FSharpValue.MakeUnion (cases[1], [| deserialize t.GenericTypeArguments[0] json |])
+  else
+    match json with
+    | JsonValue.Null -> null
+    | JsonValue.String s ->
+      if t = typeof<string> then s :> obj else fail ()
+    | JsonValue.Boolean b ->
+      if t = typeof<bool> then b :> obj else fail ()
+    | JsonValue.Number n ->
+      if    t = typeof<decimal> then n :> obj
+      elif  t = typeof<int>     then int n :> obj
+      elif  t = typeof<float>   then float n :> obj
+      else fail ()
+    | JsonValue.Float n ->
+      if    t = typeof<decimal> then n :> obj
+      elif  t = typeof<int>     then int n :> obj
+      elif  t = typeof<float>   then float n :> obj
+      else fail ()
+    | JsonValue.Array src ->
+      if t.IsArray && t.HasElementType then
+        let elmType = t.GetElementType()
+        let dst = System.Array.CreateInstance (elmType, src.Length)
+        src |> Array.iteri (fun i obj -> dst.SetValue(deserialize elmType obj, i))
+        dst :> obj
+      elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<list<_>> then
+        let elmType = t.GenericTypeArguments[0]
+        let arr = src |> Array.map (deserialize elmType)
+        let cons = t.GetMethod "Cons"
+        let empty = (t.GetProperty "Empty").GetValue null
+        Array.foldBack (fun item list -> cons.Invoke (null, [| item; list |])) arr empty
+      else fail ()
+    | JsonValue.Record src ->
+      if FSharpType.IsRecord (t, bindingFlags) then
+        let values =
+          FSharpType.GetRecordFields (t, bindingFlags)
+          |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
+          |> Array.map (fun (elmType, (_, obj)) -> deserialize elmType obj)
+        FSharpValue.MakeRecord (t, values, true)
+      elif FSharpType.IsUnion (t, bindingFlags) then
+        let case, fields = FSharpValue.GetUnionFields (obj, t, true)
+        if (FSharpType.GetUnionCases (t, true)).Length = 1 then // single case union
+          ()
+        else
+          ()
+      elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Map<_, _>> then
         ()
-      else
-        ()
-    elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Map<_, _>> then
-      ()
-    else fail ()
+      else fail ()
