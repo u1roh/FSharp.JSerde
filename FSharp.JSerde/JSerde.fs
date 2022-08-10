@@ -84,7 +84,7 @@ let (|SingleCaseUnion|_|) (t: System.Type) =
 
 
 
-let rec deserialize (t: System.Type) (json: JsonValue) : obj =
+let rec deserializeByType (t: System.Type) (json: JsonValue) : obj =
   let fail () = TypeMismatched (t, json) |> raise
   // match t, json with
   // | Option(elmType), _ -> ()
@@ -95,16 +95,16 @@ let rec deserialize (t: System.Type) (json: JsonValue) : obj =
     if json = JsonValue.Null then 
       FSharpValue.MakeUnion (cases[0], [||])
     else
-      FSharpValue.MakeUnion (cases[1], [| deserialize t.GenericTypeArguments[0] json |])
+      FSharpValue.MakeUnion (cases[1], [| deserializeByType t.GenericTypeArguments[0] json |])
   elif FSharpType.IsUnion (t, bindingFlags) then
     let cases = FSharpType.GetUnionCases (t, true)
     if cases.Length = 1 then // single case union
       match cases[0].GetFields(), json with
       | [| field |], _ ->
-        FSharpValue.MakeUnion (cases[0], [| deserialize field.PropertyType json |])
+        FSharpValue.MakeUnion (cases[0], [| deserializeByType field.PropertyType json |])
       | fields, JsonValue.Array a when fields.Length = a.Length ->
         Array.zip fields a
-        |> Array.map (fun (field, json) -> deserialize field.PropertyType json)
+        |> Array.map (fun (field, json) -> deserializeByType field.PropertyType json)
         |> fun a -> FSharpValue.MakeUnion (cases[0], a)
       | _ -> fail()
     else
@@ -119,10 +119,10 @@ let rec deserialize (t: System.Type) (json: JsonValue) : obj =
         |> function
           | Some case ->
             match case.GetFields(), json with
-            | [| field |], _ -> FSharpValue.MakeUnion (case, [| deserialize field.PropertyType json |])
+            | [| field |], _ -> FSharpValue.MakeUnion (case, [| deserializeByType field.PropertyType json |])
             | fields, JsonValue.Array a when fields.Length = a.Length -> 
               Array.zip fields a
-              |> Array.map (fun (field, json) -> deserialize field.PropertyType json)
+              |> Array.map (fun (field, json) -> deserializeByType field.PropertyType json)
               |> fun a -> FSharpValue.MakeUnion (case, a)
             | _ -> fail()
           | _ -> fail()
@@ -155,11 +155,11 @@ let rec deserialize (t: System.Type) (json: JsonValue) : obj =
       if t.IsArray && t.HasElementType then
         let elmType = t.GetElementType()
         let dst = System.Array.CreateInstance (elmType, src.Length)
-        src |> Array.iteri (fun i obj -> dst.SetValue(deserialize elmType obj, i))
+        src |> Array.iteri (fun i obj -> dst.SetValue(deserializeByType elmType obj, i))
         dst :> obj
       elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<list<_>> then
         let elmType = t.GenericTypeArguments[0]
-        let arr = src |> Array.map (deserialize elmType)
+        let arr = src |> Array.map (deserializeByType elmType)
         let cons = t.GetMethod "Cons"
         let empty = (t.GetProperty "Empty").GetValue null
         Array.foldBack (fun item list -> cons.Invoke (null, [| item; list |])) arr empty
@@ -169,7 +169,7 @@ let rec deserialize (t: System.Type) (json: JsonValue) : obj =
         let values =
           FSharpType.GetRecordFields (t, bindingFlags)
           |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
-          |> Array.map (fun (elmType, (_, obj)) -> deserialize elmType obj)
+          |> Array.map (fun (elmType, (_, obj)) -> deserializeByType elmType obj)
         FSharpValue.MakeRecord (t, values, true)
       elif FSharpType.IsUnion (t, bindingFlags) then
         let cases = FSharpType.GetUnionCases (t, true)
@@ -178,10 +178,12 @@ let rec deserialize (t: System.Type) (json: JsonValue) : obj =
           // cases[0].GetFields()
           // |> Array.map (fun field -> src |> Array.find (fst >> (=) field.)
 
-          // deserialize cases[0].GetFields()
+          // deserializeByType cases[0].GetFields()
           ()
         else
           ()
       elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Map<_, _>> then
         ()
       else fail ()
+
+let deserialize<'a> json = deserializeByType typeof<'a> json :?> 'a
