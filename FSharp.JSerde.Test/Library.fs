@@ -17,7 +17,10 @@ and B = {
 type SingleCaseUnion = private SingleCaseUnion of int
 
 let test<'a> (value: 'a) (json: JsonValue) =
-  Assert.AreEqual (json, FSharp.JSerde.serialize value)
+  match json, FSharp.JSerde.serialize value with
+  | JsonValue.Record lhs, JsonValue.Record rhs -> Assert.AreEqual (Map lhs, Map rhs)
+  | lhs, rhs -> Assert.AreEqual (lhs, rhs)
+
   Assert.AreEqual (value, FSharp.JSerde.deserialize<'a> json)
 
 [<Test>]
@@ -55,3 +58,19 @@ let list() =
   test
     [ "foo"; "bar"; "buzz" ]
     (JsonValue.Array [| JsonValue.String "foo"; JsonValue.String "bar"; JsonValue.String "buzz" |])
+
+[<Test>]
+let option() =
+  test
+    (Some 999)
+    (JsonValue.Number (decimal 999))
+  
+  test<int option>
+    None
+    JsonValue.Null
+
+[<Test>]
+let map () =
+  test
+    (Map ["foo", 3.21; "bar", 6.54])
+    (JsonValue.Record [| "foo", JsonValue.Float 3.21; "bar", JsonValue.Float 6.54 |])

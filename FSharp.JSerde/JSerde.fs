@@ -11,8 +11,8 @@ let rec serialize (obj: obj) =
   match obj with
   | :? bool as value -> JsonValue.Boolean value
   | :? int as value -> JsonValue.Number (decimal value)
-  | :? float as value -> JsonValue.Number (decimal value)
   | :? decimal as value -> JsonValue.Number value
+  | :? float as value -> JsonValue.Float value
   | :? string as value -> JsonValue.String value
   | :? System.Array as a -> Array.init a.Length (fun i -> a.GetValue i |> serialize) |> JsonValue.Array
   | _ ->
@@ -100,6 +100,23 @@ let rec deserializeByType (t: System.Type) (json: JsonValue) : obj =
       let cons = t.GetMethod "Cons"
       let empty = (t.GetProperty "Empty").GetValue null
       Array.foldBack (fun item list -> cons.Invoke (null, [| item; list |])) arr empty
+    | _ -> fail()
+  elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Map<_, _>> then
+    match json with
+    | JsonValue.Record src ->
+      let ctor = t.GetConstructors()[0]
+      let keyType = t.GenericTypeArguments[0]
+      let valueType = t.GenericTypeArguments[1]
+      let tupleType = FSharpType.MakeTupleType [| keyType; valueType |]
+      let dst = System.Array.CreateInstance (tupleType, src.Length)
+      src |> Array.iteri (fun i (key, value) ->
+        let key =
+          JsonValue.TryParse key
+          |> Option.map (deserializeByType keyType)
+          |> Option.defaultValue key
+        let value = deserializeByType valueType value
+        dst.SetValue(FSharpValue.MakeTuple ([| key; value |], tupleType), i))
+      ctor.Invoke [| dst |]
     | _ -> fail()
   elif FSharpType.IsUnion (t, bindingFlags) then
     let cases = FSharpType.GetUnionCases (t, true)
