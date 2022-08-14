@@ -86,16 +86,21 @@ let (|SingleCaseUnion|_|) (t: System.Type) =
 
 let rec deserializeByType (t: System.Type) (json: JsonValue) : obj =
   let fail () = TypeMismatched (t, json) |> raise
-  // match t, json with
-  // | Option(elmType), _ -> ()
-  // | SingleCaseUnion(case), JsonValue.Array a -> ()
-
   if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>> then
     let cases = FSharpType.GetUnionCases t
     if json = JsonValue.Null then 
       FSharpValue.MakeUnion (cases[0], [||])
     else
       FSharpValue.MakeUnion (cases[1], [| deserializeByType t.GenericTypeArguments[0] json |])
+  elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<list<_>> then
+    match json with
+    | JsonValue.Array src ->
+      let elmType = t.GenericTypeArguments[0]
+      let arr = src |> Array.map (deserializeByType elmType)
+      let cons = t.GetMethod "Cons"
+      let empty = (t.GetProperty "Empty").GetValue null
+      Array.foldBack (fun item list -> cons.Invoke (null, [| item; list |])) arr empty
+    | _ -> fail()
   elif FSharpType.IsUnion (t, bindingFlags) then
     let cases = FSharpType.GetUnionCases (t, true)
     if cases.Length = 1 then // single case union

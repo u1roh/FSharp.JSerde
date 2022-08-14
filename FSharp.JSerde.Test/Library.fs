@@ -41,3 +41,17 @@ let tuple() =
   let value = "foo", true
   Assert.AreEqual (expected, FSharp.JSerde.serialize value)
   Assert.AreEqual (value, FSharp.JSerde.deserialize<string * bool> expected)
+
+[<Test>]
+let array() =
+  let expected = JsonValue.Array [| JsonValue.String "foo"; JsonValue.String "bar"; JsonValue.String "buzz" |]
+  let value = [| "foo"; "bar"; "buzz" |]
+  Assert.AreEqual (expected, FSharp.JSerde.serialize value)
+  Assert.AreEqual (value, FSharp.JSerde.deserialize<string[]> expected)
+
+[<Test>]
+let list() =
+  let expected = JsonValue.Array [| JsonValue.String "foo"; JsonValue.String "bar"; JsonValue.String "buzz" |]
+  let value = [ "foo"; "bar"; "buzz" ]
+  Assert.AreEqual (expected, FSharp.JSerde.serialize value)
+  Assert.AreEqual (value, FSharp.JSerde.deserialize<string list> expected)
