@@ -136,6 +136,14 @@ let rec deserializeByType (t: System.Type) (json: JsonValue) : obj =
         |> Array.map (fun (elmType, (_, obj)) -> deserializeByType elmType obj)
       FSharpValue.MakeRecord (t, values, true)
     | _ -> fail ()
+  elif FSharpType.IsTuple t then
+    let elmTypes = FSharpType.GetTupleElements t
+    match json with
+    | JsonValue.Array src when src.Length = elmTypes.Length ->
+      Array.zip elmTypes src
+      |> Array.map (fun (t, json) -> deserializeByType t json)
+      |> fun values -> FSharpValue.MakeTuple (values, t)
+    | _ -> fail ()
   else
     match json with
     | JsonValue.Null -> null

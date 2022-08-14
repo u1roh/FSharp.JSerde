@@ -34,3 +34,10 @@ let ``B``() =
   let value = { Foo = 100; Bar = "bar" }
   Assert.AreEqual (expected, FSharp.JSerde.serialize value)
   Assert.AreEqual (value, FSharp.JSerde.deserialize<B> expected)
+
+[<Test>]
+let tuple() =
+  let expected = JsonValue.Array [| JsonValue.String "foo"; JsonValue.Boolean true |]
+  let value = "foo", true
+  Assert.AreEqual (expected, FSharp.JSerde.serialize value)
+  Assert.AreEqual (value, FSharp.JSerde.deserialize<string * bool> expected)
