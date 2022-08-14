@@ -27,3 +27,10 @@ let ``A.Case2`` () =
   let expected = JsonValue.Record [| "Case2", JsonValue.Number (decimal 123) |]
   Assert.AreEqual (expected, FSharp.JSerde.serialize (Case2 123))
   Assert.AreEqual (Case2 123, FSharp.JSerde.deserialize<A> expected)
+
+[<Test>]
+let ``B``() =
+  let expected = JsonValue.Record [| "Foo", JsonValue.Number (decimal 100); "Bar", JsonValue.String "bar" |]
+  let value = { Foo = 100; Bar = "bar" }
+  Assert.AreEqual (expected, FSharp.JSerde.serialize value)
+  Assert.AreEqual (value, FSharp.JSerde.deserialize<B> expected)

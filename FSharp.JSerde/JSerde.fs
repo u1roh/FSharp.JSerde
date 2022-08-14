@@ -127,6 +127,15 @@ let rec deserializeByType (t: System.Type) (json: JsonValue) : obj =
             | _ -> fail()
           | _ -> fail()
       | _ -> fail()
+  elif FSharpType.IsRecord (t, bindingFlags) then
+    match json with
+    | JsonValue.Record src ->
+      let values =
+        FSharpType.GetRecordFields (t, bindingFlags)
+        |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
+        |> Array.map (fun (elmType, (_, obj)) -> deserializeByType elmType obj)
+      FSharpValue.MakeRecord (t, values, true)
+    | _ -> fail ()
   else
     match json with
     | JsonValue.Null -> null
