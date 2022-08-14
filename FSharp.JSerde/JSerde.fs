@@ -68,21 +68,6 @@ and private serializeList obj =
 
 exception TypeMismatched of System.Type * JsonValue
 
-let (|Option|_|) (t: System.Type) =
-  if t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>> then
-    Some t.GenericTypeArguments[0]
-  else
-    None
-
-let (|SingleCaseUnion|_|) (t: System.Type) =
-  if FSharpType.IsUnion (t, bindingFlags) then
-    let cases = FSharpType.GetUnionCases (t, true)
-    if cases.Length = 1 then // single case union
-      Some cases[0]
-    else None
-  else None
-
-
 let rec deserializeByType (t: System.Type) (json: JsonValue) : obj =
   let fail () = TypeMismatched (t, json) |> raise
   if t.IsArray && t.HasElementType then
@@ -130,7 +115,7 @@ let rec deserializeByType (t: System.Type) (json: JsonValue) : obj =
     if cases.Length = 1 then // single case union
       match cases[0].GetFields(), json with
       | [| field |], _ ->
-        FSharpValue.MakeUnion (cases[0], [| deserializeByType field.PropertyType json |])
+        FSharpValue.MakeUnion (cases[0], [| deserializeByType field.PropertyType json |], bindingFlags)
       | fields, JsonValue.Array a when fields.Length = a.Length ->
         Array.zip fields a
         |> Array.map (fun (field, json) -> deserializeByType field.PropertyType json)
