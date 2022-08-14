@@ -16,42 +16,42 @@ and B = {
 
 type SingleCaseUnion = private SingleCaseUnion of int
 
+let test<'a> (value: 'a) (json: JsonValue) =
+  Assert.AreEqual (json, FSharp.JSerde.serialize value)
+  Assert.AreEqual (value, FSharp.JSerde.deserialize<'a> json)
+
 [<Test>]
 let ``A.Case1`` () =
-  let expected = JsonValue.String "Case1"
-  Assert.AreEqual (expected, FSharp.JSerde.serialize Case1)
-  Assert.AreEqual (Case1, FSharp.JSerde.deserialize<A> expected)
+  test
+    Case1
+    (JsonValue.String "Case1")
 
 [<Test>]
 let ``A.Case2`` () =
-  let expected = JsonValue.Record [| "Case2", JsonValue.Number (decimal 123) |]
-  Assert.AreEqual (expected, FSharp.JSerde.serialize (Case2 123))
-  Assert.AreEqual (Case2 123, FSharp.JSerde.deserialize<A> expected)
+  test
+    (Case2 123)
+    (JsonValue.Record [| "Case2", JsonValue.Number (decimal 123) |])
 
 [<Test>]
 let ``B``() =
-  let expected = JsonValue.Record [| "Foo", JsonValue.Number (decimal 100); "Bar", JsonValue.String "bar" |]
-  let value = { Foo = 100; Bar = "bar" }
-  Assert.AreEqual (expected, FSharp.JSerde.serialize value)
-  Assert.AreEqual (value, FSharp.JSerde.deserialize<B> expected)
+  test
+    { Foo = 100; Bar = "bar" }
+    (JsonValue.Record [| "Foo", JsonValue.Number (decimal 100); "Bar", JsonValue.String "bar" |])
 
 [<Test>]
 let tuple() =
-  let expected = JsonValue.Array [| JsonValue.String "foo"; JsonValue.Boolean true |]
-  let value = "foo", true
-  Assert.AreEqual (expected, FSharp.JSerde.serialize value)
-  Assert.AreEqual (value, FSharp.JSerde.deserialize<string * bool> expected)
+  test
+    ("foo", true)
+    (JsonValue.Array [| JsonValue.String "foo"; JsonValue.Boolean true |])
 
 [<Test>]
 let array() =
-  let expected = JsonValue.Array [| JsonValue.String "foo"; JsonValue.String "bar"; JsonValue.String "buzz" |]
-  let value = [| "foo"; "bar"; "buzz" |]
-  Assert.AreEqual (expected, FSharp.JSerde.serialize value)
-  Assert.AreEqual (value, FSharp.JSerde.deserialize<string[]> expected)
+  test
+    [| "foo"; "bar"; "buzz" |]
+    (JsonValue.Array [| JsonValue.String "foo"; JsonValue.String "bar"; JsonValue.String "buzz" |])
 
 [<Test>]
 let list() =
-  let expected = JsonValue.Array [| JsonValue.String "foo"; JsonValue.String "bar"; JsonValue.String "buzz" |]
-  let value = [ "foo"; "bar"; "buzz" ]
-  Assert.AreEqual (expected, FSharp.JSerde.serialize value)
-  Assert.AreEqual (value, FSharp.JSerde.deserialize<string list> expected)
+  test
+    [ "foo"; "bar"; "buzz" ]
+    (JsonValue.Array [| JsonValue.String "foo"; JsonValue.String "bar"; JsonValue.String "buzz" |])
