@@ -96,6 +96,54 @@ and private serializeList (custom: Serializer option) obj =
 
 exception TypeMismatched of System.Type * JsonValue
 
+let private createList (t: System.Type) (src: obj[]) =
+  let cons = t.GetMethod "Cons"
+  let empty = (t.GetProperty "Empty").GetValue null
+  Array.foldBack (fun item list -> cons.Invoke (null, [| item; list |])) src empty
+
+let private createOption (t: System.Type) (src: obj option) =
+  let cases = FSharpType.GetUnionCases t
+  match src with
+  | Some obj -> FSharpValue.MakeUnion (cases[1], [| obj |])
+  | None -> FSharpValue.MakeUnion (cases[0], [||])
+
+let private createMap (t: System.Type) (src: (obj * obj)[]) =
+  let ctor = t.GetConstructors()[0]
+  let tupleType = FSharpType.MakeTupleType t.GenericTypeArguments
+  let dst = System.Array.CreateInstance (tupleType, src.Length)
+  src |> Array.iteri (fun i (key, value) ->
+    dst.SetValue(FSharpValue.MakeTuple ([| key; value |], tupleType), i))
+  ctor.Invoke [| dst |]
+
+type Type =
+  | Array of elmType:System.Type
+  | Option of System.Type * createOption:(obj option -> obj)
+  | List of System.Type * createList:(obj[] -> obj)
+  | Map of key:System.Type * value:System.Type * createMap:((obj * obj)[] -> obj)
+  | Union of UnionCaseInfo[]
+  | Record of System.Reflection.PropertyInfo[]
+  | Tuple of System.Type[]
+  | Other
+
+module Type =
+  let classify (t: System.Type) =
+    if t.IsArray && t.HasElementType then
+      t.GetElementType () |> Array
+    elif FSharpType.IsUnion (t, bindingFlags) then
+      FSharpType.GetUnionCases (t, true) |> Union
+    elif FSharpType.IsRecord (t, bindingFlags) then
+      FSharpType.GetRecordFields (t, bindingFlags) |> Record
+    elif FSharpType.IsTuple t then
+      FSharpType.GetTupleElements t |> Tuple
+    else if t.IsGenericType then
+      match t.GetGenericTypeDefinition() with
+      | def when def = typedefof<option<_>> -> Option (t.GenericTypeArguments[0], createOption t)
+      | def when def = typedefof<list<_>>   -> List (t.GenericTypeArguments[0], createList t)
+      | def when def = typedefof<Map<_, _>> -> Map (t.GenericTypeArguments[0], t.GenericTypeArguments[1], createMap t)
+      | _ -> Other
+    else Other
+
+
 let rec private deserializeByType (custom: Serializer option) (t: System.Type) (json: JsonValue) : obj =
   let fail () = TypeMismatched (t, json) |> raise
   match custom |> Option.bind (fun c -> c.Deserialize (t, json)) with
@@ -110,36 +158,31 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
         dst :> obj
       | _ -> fail()
     elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>> then
-      let cases = FSharpType.GetUnionCases t
-      if json = JsonValue.Null then 
-        FSharpValue.MakeUnion (cases[0], [||])
-      else
-        FSharpValue.MakeUnion (cases[1], [| deserializeByType custom t.GenericTypeArguments[0] json |])
+      if json = JsonValue.Null
+        then None
+        else deserializeByType custom t.GenericTypeArguments[0] json |> Some 
+      |> createOption t
     elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<list<_>> then
       match json with
       | JsonValue.Array src ->
-        let elmType = t.GenericTypeArguments[0]
-        let arr = src |> Array.map (deserializeByType custom elmType)
-        let cons = t.GetMethod "Cons"
-        let empty = (t.GetProperty "Empty").GetValue null
-        Array.foldBack (fun item list -> cons.Invoke (null, [| item; list |])) arr empty
+        src
+        |> Array.map (deserializeByType custom t.GenericTypeArguments[0])
+        |> createList t
       | _ -> fail()
     elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Map<_, _>> then
       match json with
       | JsonValue.Record src ->
-        let ctor = t.GetConstructors()[0]
         let keyType = t.GenericTypeArguments[0]
         let valueType = t.GenericTypeArguments[1]
-        let tupleType = FSharpType.MakeTupleType [| keyType; valueType |]
-        let dst = System.Array.CreateInstance (tupleType, src.Length)
-        src |> Array.iteri (fun i (key, value) ->
+        src
+        |> Array.map (fun (key, value) ->
           let key =
             JsonValue.TryParse key
             |> Option.map (deserializeByType custom keyType)
             |> Option.defaultValue key
           let value = deserializeByType custom valueType value
-          dst.SetValue(FSharpValue.MakeTuple ([| key; value |], tupleType), i))
-        ctor.Invoke [| dst |]
+          key, value)
+        |> createMap t
       | _ -> fail()
     elif FSharpType.IsUnion (t, bindingFlags) then
       let cases = FSharpType.GetUnionCases (t, true)
