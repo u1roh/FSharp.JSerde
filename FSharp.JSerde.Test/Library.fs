@@ -20,12 +20,14 @@ and B = {
 
 type SingleCaseUnion = private SingleCaseUnion of int
 
-let test<'a> (value: 'a) (json: JsonValue) =
-  match json, JSerde.serialize value with
+let testBy<'a> custom (value: 'a) (json: JsonValue) =
+  match json, JSerde.serialize custom value with
   | JsonValue.Record lhs, JsonValue.Record rhs -> Assert.AreEqual (Map lhs, Map rhs)
   | lhs, rhs -> Assert.AreEqual (lhs, rhs)
 
-  Assert.AreEqual (value, JSerde.deserialize<'a> json)
+  Assert.AreEqual (value, JSerde.deserialize<'a> custom json)
+
+let test<'a> = testBy<'a> None
 
 [<Test>]
 let ``A.Case1`` () =
@@ -122,3 +124,15 @@ let datetime () =
   let value = System.DateTime(2022, 8, 15, 12, 34, 56)
   let json = JsonValue.String "2022/08/15 12:34:56" // default format of DateTime.ToString()
   test value json
+
+[<Test>]
+let datetimeByCustom () =
+  let value = System.DateTime.Now
+  let json = JsonValue.Number (decimal value.Ticks)
+  let custom =
+    JSerde.custom<System.DateTime>
+      (fun value -> value.Ticks |> decimal |> JsonValue.Number)
+      (function JsonValue.Number ticks -> int64 ticks |> System.DateTime | _ -> failwith "DateTime format error")
+    |> Seq.singleton
+    |> JSerde.Serializer
+  testBy (Some custom) value json
