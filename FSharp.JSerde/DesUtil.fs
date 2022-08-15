@@ -1,4 +1,5 @@
-module internal FSharp.JSerde.Deserialization
+// utility for deserialization
+module internal FSharp.JSerde.DesUtil
 open Microsoft.FSharp.Reflection
 
 let private bindingFlags = System.Reflection.BindingFlags.Public ||| System.Reflection.BindingFlags.NonPublic

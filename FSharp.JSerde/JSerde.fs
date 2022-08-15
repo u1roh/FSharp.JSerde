@@ -84,21 +84,21 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
   match custom |> Option.bind (fun c -> c.Deserialize (t, json)) with
   | Some obj -> obj
   | _ ->
-    match Deserialization.classify t, json with
-    | Deserialization.Array (elmType, createArray), JsonValue.Array src ->
+    match DesUtil.classify t, json with
+    | DesUtil.Array (elmType, createArray), JsonValue.Array src ->
       src
       |> Array.map (fun obj -> deserializeByType custom elmType obj)
       |> createArray
-    | Deserialization.Option (elmType, createOption), json ->
+    | DesUtil.Option (elmType, createOption), json ->
       if json = JsonValue.Null
         then None
         else deserializeByType custom elmType json |> Some 
       |> createOption
-    | Deserialization.List (elmType, createList), JsonValue.Array src ->
+    | DesUtil.List (elmType, createList), JsonValue.Array src ->
       src
       |> Array.map (deserializeByType custom elmType)
       |> createList
-    | Deserialization.Map (keyType, valueType, createMap), JsonValue.Record src ->
+    | DesUtil.Map (keyType, valueType, createMap), JsonValue.Record src ->
       src
       |> Array.map (fun (key, value) ->
         let key =
@@ -108,7 +108,7 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
         let value = deserializeByType custom valueType value
         key, value)
       |> createMap
-    | Deserialization.SingleCaseUnion (fields, create), json ->
+    | DesUtil.SingleCaseUnion (fields, create), json ->
       match fields, json with
       | [| field |], _ -> create [| deserializeByType custom field.PropertyType json |]
       | fields, JsonValue.Array a when fields.Length = a.Length ->
@@ -116,11 +116,11 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
         |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
         |> create
       | _ -> fail()
-    | Deserialization.Union (cases, create), JsonValue.String name ->
+    | DesUtil.Union (cases, create), JsonValue.String name ->
       cases
       |> Array.tryFind (fun case -> case.Name = name && case.GetFields().Length = 0)
       |> function Some case -> create case [||] | _ -> fail()
-    | Deserialization.Union (cases, create), JsonValue.Record [| name, json |] ->
+    | DesUtil.Union (cases, create), JsonValue.Record [| name, json |] ->
       cases
       |> Array.tryFind (fun case -> case.Name = name)
       |> Option.bind (fun case ->
@@ -132,24 +132,24 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
             |> create case |> Some
           | _ -> None)
       |> function Some obj -> obj | _ -> fail ()
-    | Deserialization.Record (fields, create), JsonValue.Record src ->
+    | DesUtil.Record (fields, create), JsonValue.Record src ->
       fields
       |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
       |> Array.map (fun (elmType, (_, obj)) -> deserializeByType custom elmType obj)
       |> create
-    | Deserialization.Tuple (elmTypes, create), JsonValue.Array src when src.Length = elmTypes.Length ->
+    | DesUtil.Tuple (elmTypes, create), JsonValue.Array src when src.Length = elmTypes.Length ->
       Array.zip elmTypes src
       |> Array.map (fun (t, json) -> deserializeByType custom t json)
       |> create
-    | Deserialization.String,   JsonValue.String s -> s :> obj
-    | Deserialization.Bool,     JsonValue.Boolean b -> b :> obj
-    | Deserialization.Int,      JsonValue.Number n -> int n :> obj
-    | Deserialization.Float,    JsonValue.Number n -> float n :> obj
-    | Deserialization.Decimal,  JsonValue.Number n -> n :> obj
-    | Deserialization.Int,      JsonValue.Float n -> int n :> obj
-    | Deserialization.Float,    JsonValue.Float n -> n :> obj
-    | Deserialization.Decimal,  JsonValue.Float n -> decimal n :> obj
-    | Deserialization.Parsable parse, JsonValue.String s -> parse s
+    | DesUtil.String,   JsonValue.String s -> s :> obj
+    | DesUtil.Bool,     JsonValue.Boolean b -> b :> obj
+    | DesUtil.Int,      JsonValue.Number n -> int n :> obj
+    | DesUtil.Float,    JsonValue.Number n -> float n :> obj
+    | DesUtil.Decimal,  JsonValue.Number n -> n :> obj
+    | DesUtil.Int,      JsonValue.Float n -> int n :> obj
+    | DesUtil.Float,    JsonValue.Float n -> n :> obj
+    | DesUtil.Decimal,  JsonValue.Float n -> decimal n :> obj
+    | DesUtil.Parsable parse, JsonValue.String s -> parse s
     | _ -> fail ()
 
 let deserialize<'a> custom json = deserializeByType custom typeof<'a> json :?> 'a
