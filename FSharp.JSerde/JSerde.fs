@@ -120,6 +120,7 @@ type Type =
   | Option of System.Type * createOption:(obj option -> obj)
   | List of System.Type * createList:(obj[] -> obj)
   | Map of key:System.Type * value:System.Type * createMap:((obj * obj)[] -> obj)
+  | SingleCaseUnion of fields:System.Reflection.PropertyInfo[] * create:(obj[] -> obj)
   | Union of UnionCaseInfo[]
   | Record of System.Reflection.PropertyInfo[]
   | Tuple of System.Type[]
@@ -148,7 +149,10 @@ module Type =
     | _, Some def when def = typedefof<option<_>> -> Option (t.GenericTypeArguments[0], createOption t)
     | _, Some def when def = typedefof<list<_>>   -> List (t.GenericTypeArguments[0], createList t)
     | _, Some def when def = typedefof<Map<_, _>> -> Map (t.GenericTypeArguments[0], t.GenericTypeArguments[1], createMap t)
-    | t, _ when FSharpType.IsUnion (t, bindingFlags) -> FSharpType.GetUnionCases (t, true) |> Union
+    | t, _ when FSharpType.IsUnion (t, bindingFlags) ->
+      match FSharpType.GetUnionCases (t, true) with
+      | [| case |] -> SingleCaseUnion (case.GetFields(), fun args -> FSharpValue.MakeUnion (case, args, bindingFlags))
+      | cases -> Union cases
     | t, _ when FSharpType.IsRecord (t, bindingFlags) -> FSharpType.GetRecordFields (t, bindingFlags) |> Record
     | t, _ when FSharpType.IsTuple t -> FSharpType.GetTupleElements t |> Tuple
     | _ ->
@@ -186,36 +190,30 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
         let value = deserializeByType custom valueType value
         key, value)
       |> createMap
-    | Union cases, json ->
-      if cases.Length = 1 then // single case union
-        match cases[0].GetFields(), json with
-        | [| field |], _ ->
-          FSharpValue.MakeUnion (cases[0], [| deserializeByType custom field.PropertyType json |], bindingFlags)
-        | fields, JsonValue.Array a when fields.Length = a.Length ->
-          Array.zip fields a
-          |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
-          |> fun a -> FSharpValue.MakeUnion (cases[0], a)
-        | _ -> fail()
-      else
-        match json with
-        | JsonValue.String name ->
-          cases
-          |> Array.tryFind (fun case -> case.Name = name && case.GetFields().Length = 0)
-          |> function Some case -> FSharpValue.MakeUnion (case, [||]) | _ -> fail()
-        | JsonValue.Record [| name, json |] ->
-          cases
-          |> Array.tryFind (fun case -> case.Name = name)
-          |> function
-            | Some case ->
-              match case.GetFields(), json with
-              | [| field |], _ -> FSharpValue.MakeUnion (case, [| deserializeByType custom field.PropertyType json |])
-              | fields, JsonValue.Array a when fields.Length = a.Length -> 
-                Array.zip fields a
-                |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
-                |> fun a -> FSharpValue.MakeUnion (case, a)
-              | _ -> fail()
-            | _ -> fail()
-        | _ -> fail()
+    | SingleCaseUnion (fields, create), json ->
+      match fields, json with
+      | [| field |], _ -> create [| deserializeByType custom field.PropertyType json |]
+      | fields, JsonValue.Array a when fields.Length = a.Length ->
+        Array.zip fields a
+        |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
+        |> create
+      | _ -> fail()
+    | Union cases, JsonValue.String name ->
+      cases
+      |> Array.tryFind (fun case -> case.Name = name && case.GetFields().Length = 0)
+      |> function Some case -> FSharpValue.MakeUnion (case, [||]) | _ -> fail()
+    | Union cases, JsonValue.Record [| name, json |] ->
+      cases
+      |> Array.tryFind (fun case -> case.Name = name)
+      |> Option.bind (fun case ->
+          match case.GetFields(), json with
+          | [| field |], _ -> FSharpValue.MakeUnion (case, [| deserializeByType custom field.PropertyType json |]) |> Some
+          | fields, JsonValue.Array a when fields.Length = a.Length -> 
+            Array.zip fields a
+            |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
+            |> fun a -> FSharpValue.MakeUnion (case, a) |> Some
+          | _ -> None)
+      |> function Some obj -> obj | _ -> fail ()
     | Record fields, JsonValue.Record src ->
       let values =
         fields
