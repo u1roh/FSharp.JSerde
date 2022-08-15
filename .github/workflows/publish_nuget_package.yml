@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  publish-nuget:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -23,7 +23,7 @@ jobs:
       - name: Pack
         run: dotnet pack -o package/
 
-      - name: Publish to GitHub Packages
+      - name: Publish to NuGet.org
         run: |
           dotnet nuget push "package/FSharp.JSerde.*.nupkg" --skip-duplicate \
             --api-key ${{ secrets.NUGET_ORG_API_KEY }} \
