@@ -22,11 +22,11 @@ and B = private {
 type SingleCaseUnion = private SingleCaseUnion of int
 
 let testBy<'a> custom (value: 'a) (json: JsonValue) =
-  match json, JSerde.serialize custom value with
+  match json, JSerde.toJsonValue custom value with
   | JsonValue.Record lhs, JsonValue.Record rhs -> Assert.AreEqual (Map lhs, Map rhs)
   | lhs, rhs -> Assert.AreEqual (lhs, rhs)
 
-  Assert.AreEqual (value, JSerde.deserialize<'a> custom json)
+  Assert.AreEqual (value, JSerde.fromJsonValue<'a> custom json)
 
 let test<'a> = testBy<'a> None
 

@@ -9,12 +9,17 @@ let custom<'a> (serialize: 'a -> JsonValue) (deserialize: JsonValue -> 'a) =
       member _.Serialize obj = serialize (obj :?> 'a)
       member _.Deserialize json = deserialize json :> obj }
 
+
+// ------------------------------------------------------------------------
+// serialization
+
+
 exception UnsupportedType of System.Type
 
 let private bindingFlags = System.Reflection.BindingFlags.Public ||| System.Reflection.BindingFlags.NonPublic
 
 /// Serialize F# value into `FSharp.Data.JsonValue`
-let rec serialize (custom : Serializer option) (obj: obj) =
+let rec toJsonValue (custom : Serializer option) (obj: obj) =
   if isNull obj then JsonValue.Null else
   match custom |> Option.bind (fun c -> c.Serialize obj) with
   | Some json -> json
@@ -25,17 +30,17 @@ let rec serialize (custom : Serializer option) (obj: obj) =
     | :? decimal as value -> JsonValue.Number value
     | :? float as value -> JsonValue.Float value
     | :? string as value -> JsonValue.String value
-    | :? System.Array as a -> Array.init a.Length (fun i -> a.GetValue i |> serialize custom) |> JsonValue.Array
+    | :? System.Array as a -> Array.init a.Length (fun i -> a.GetValue i |> toJsonValue custom) |> JsonValue.Array
     | _ ->
       let t = obj.GetType()
       if FSharpType.IsTuple t then
         FSharpValue.GetTupleFields obj
-        |> Array.map (serialize custom)
+        |> Array.map (toJsonValue custom)
         |> JsonValue.Array
       elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>> then
         let case, fields = FSharpValue.GetUnionFields (obj, obj.GetType(), false)
         if case.Name = "Some"
-          then serialize custom fields[0]
+          then toJsonValue custom fields[0]
           else JsonValue.Null
       elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<list<_>> then
         serializeList custom obj
@@ -46,27 +51,27 @@ let rec serialize (custom : Serializer option) (obj: obj) =
         |> Seq.cast<obj>
         |> Seq.map (fun pair ->
           let t = pair.GetType()
-          let get name = (t.GetProperty name).GetValue pair |> serialize custom
+          let get name = (t.GetProperty name).GetValue pair |> toJsonValue custom
           let key = get "Key" |> function JsonValue.String s -> s | json -> string json
           key, get "Value")
         |> Seq.toArray
         |> JsonValue.Record
       elif FSharpType.IsRecord (t, bindingFlags) then
         FSharpType.GetRecordFields (t, bindingFlags)
-        |> Array.map (fun prop -> prop.Name, FSharpValue.GetRecordField (obj, prop) |> serialize custom)
+        |> Array.map (fun prop -> prop.Name, FSharpValue.GetRecordField (obj, prop) |> toJsonValue custom)
         |> JsonValue.Record
       elif FSharpType.IsUnion (t, bindingFlags) then
         let case, fields = FSharpValue.GetUnionFields (obj, t, true)
         if (FSharpType.GetUnionCases (t, true)).Length = 1 then // single case union
           match fields with
           | [||] -> JsonValue.String case.Name
-          | [| item |] -> serialize custom item
-          | array -> array |> Array.map (serialize custom) |> JsonValue.Array
+          | [| item |] -> toJsonValue custom item
+          | array -> array |> Array.map (toJsonValue custom) |> JsonValue.Array
         else
           match fields with
           | [||] -> JsonValue.String case.Name
-          | [| item |] -> JsonValue.Record [| case.Name, serialize custom item |]
-          | array -> JsonValue.Record [| case.Name, array |> Array.map (serialize custom) |> JsonValue.Array |]
+          | [| item |] -> JsonValue.Record [| case.Name, toJsonValue custom item |]
+          | array -> JsonValue.Record [| case.Name, array |> Array.map (toJsonValue custom) |> JsonValue.Array |]
       elif t.GetMethod ("Parse", [| typeof<string> |]) |> isNull |> not then
         obj.ToString() |> JsonValue.String
       else
@@ -75,47 +80,62 @@ let rec serialize (custom : Serializer option) (obj: obj) =
 and private serializeList (custom: Serializer option) obj =
   let case, fields = FSharpValue.GetUnionFields (obj, obj.GetType(), false)
   if case.Name = "Cons" then
-    serialize custom fields[0] :: serializeList custom fields[1]
+    toJsonValue custom fields[0] :: serializeList custom fields[1]
   else
     []
 
-exception TypeMismatched of System.Type * JsonValue
+/// Serialize F# value into JSON string
+let toStringWith fmt custom (obj: obj) =
+  (toJsonValue custom obj).ToString(if fmt then JsonSaveOptions.None else JsonSaveOptions.DisableFormatting)
 
-let rec private deserializeByType (custom: Serializer option) (t: System.Type) (json: JsonValue) : obj =
-  let fail () = TypeMismatched (t, json) |> raise
+/// Serialize F# value into unformatted JSON string
+let toString: _ -> obj -> _ = toStringWith false
+
+/// Serialize F# value into formatted JSON string
+let toPrettyString: _ -> obj -> _ = toStringWith true
+
+
+// ------------------------------------------------------------------------
+// deserialization
+
+
+exception TypeMismatch of System.Type * JsonValue
+
+let rec private fromJsonValueByType (custom: Serializer option) (t: System.Type) (json: JsonValue) : obj =
+  let fail () = TypeMismatch (t, json) |> raise
   match custom |> Option.bind (fun c -> c.Deserialize (t, json)) with
   | Some obj -> obj
   | _ ->
     match DesUtil.classify t, json with
     | DesUtil.Array (elmType, createArray), JsonValue.Array src ->
       src
-      |> Array.map (fun obj -> deserializeByType custom elmType obj)
+      |> Array.map (fun obj -> fromJsonValueByType custom elmType obj)
       |> createArray
     | DesUtil.Option (elmType, createOption), json ->
       if json = JsonValue.Null
         then None
-        else deserializeByType custom elmType json |> Some 
+        else fromJsonValueByType custom elmType json |> Some 
       |> createOption
     | DesUtil.List (elmType, createList), JsonValue.Array src ->
       src
-      |> Array.map (deserializeByType custom elmType)
+      |> Array.map (fromJsonValueByType custom elmType)
       |> createList
     | DesUtil.Map (keyType, valueType, createMap), JsonValue.Record src ->
       src
       |> Array.map (fun (key, value) ->
         let key =
           JsonValue.TryParse key
-          |> Option.map (deserializeByType custom keyType)
+          |> Option.map (fromJsonValueByType custom keyType)
           |> Option.defaultValue key
-        let value = deserializeByType custom valueType value
+        let value = fromJsonValueByType custom valueType value
         key, value)
       |> createMap
     | DesUtil.SingleCaseUnion (fields, create), json ->
       match fields, json with
-      | [| field |], _ -> create [| deserializeByType custom field.PropertyType json |]
+      | [| field |], _ -> create [| fromJsonValueByType custom field.PropertyType json |]
       | fields, JsonValue.Array a when fields.Length = a.Length ->
         Array.zip fields a
-        |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
+        |> Array.map (fun (field, json) -> fromJsonValueByType custom field.PropertyType json)
         |> create
       | _ -> fail()
     | DesUtil.Union (cases, create), JsonValue.String name ->
@@ -127,21 +147,21 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
       |> Array.tryFind (fun case -> case.Name = name)
       |> Option.bind (fun case ->
           match case.GetFields(), json with
-          | [| field |], _ -> create case [| deserializeByType custom field.PropertyType json |] |> Some
+          | [| field |], _ -> create case [| fromJsonValueByType custom field.PropertyType json |] |> Some
           | fields, JsonValue.Array a when fields.Length = a.Length -> 
             Array.zip fields a
-            |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
+            |> Array.map (fun (field, json) -> fromJsonValueByType custom field.PropertyType json)
             |> create case |> Some
           | _ -> None)
       |> function Some obj -> obj | _ -> fail ()
     | DesUtil.Record (fields, create), JsonValue.Record src ->
       fields
       |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
-      |> Array.map (fun (elmType, (_, obj)) -> deserializeByType custom elmType obj)
+      |> Array.map (fun (elmType, (_, obj)) -> fromJsonValueByType custom elmType obj)
       |> create
     | DesUtil.Tuple (elmTypes, create), JsonValue.Array src when src.Length = elmTypes.Length ->
       Array.zip elmTypes src
-      |> Array.map (fun (t, json) -> deserializeByType custom t json)
+      |> Array.map (fun (t, json) -> fromJsonValueByType custom t json)
       |> create
     | DesUtil.String,   JsonValue.String s -> s :> obj
     | DesUtil.Bool,     JsonValue.Boolean b -> b :> obj
@@ -155,4 +175,10 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
     | _ -> fail ()
 
 /// Deserialize `FSharp.Data.JsonValue` into F# type
-let deserialize<'a> custom json = deserializeByType custom typeof<'a> json :?> 'a
+let fromJsonValue<'a> custom json = fromJsonValueByType custom typeof<'a> json :?> 'a
+
+
+/// Deserialize JSON string into F# type
+let fromString<'a> custom json =
+  JsonValue.Parse json
+  |> fromJsonValue<'a> custom
