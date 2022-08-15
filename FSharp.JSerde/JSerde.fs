@@ -85,10 +85,10 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
   | Some obj -> obj
   | _ ->
     match Deserialization.classify t, json with
-    | Deserialization.Array elmType, JsonValue.Array src ->
-      let dst = System.Array.CreateInstance (elmType, src.Length)
-      src |> Array.iteri (fun i obj -> dst.SetValue(deserializeByType custom elmType obj, i))
-      dst :> obj
+    | Deserialization.Array (elmType, createArray), JsonValue.Array src ->
+      src
+      |> Array.map (fun obj -> deserializeByType custom elmType obj)
+      |> createArray
     | Deserialization.Option (elmType, createOption), json ->
       if json = JsonValue.Null
         then None
@@ -116,32 +116,31 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
         |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
         |> create
       | _ -> fail()
-    | Deserialization.Union cases, JsonValue.String name ->
+    | Deserialization.Union (cases, create), JsonValue.String name ->
       cases
       |> Array.tryFind (fun case -> case.Name = name && case.GetFields().Length = 0)
-      |> function Some case -> FSharpValue.MakeUnion (case, [||], bindingFlags) | _ -> fail()
-    | Deserialization.Union cases, JsonValue.Record [| name, json |] ->
+      |> function Some case -> create case [||] | _ -> fail()
+    | Deserialization.Union (cases, create), JsonValue.Record [| name, json |] ->
       cases
       |> Array.tryFind (fun case -> case.Name = name)
       |> Option.bind (fun case ->
           match case.GetFields(), json with
-          | [| field |], _ -> FSharpValue.MakeUnion (case, [| deserializeByType custom field.PropertyType json |], bindingFlags) |> Some
+          | [| field |], _ -> create case [| deserializeByType custom field.PropertyType json |] |> Some
           | fields, JsonValue.Array a when fields.Length = a.Length -> 
             Array.zip fields a
             |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
-            |> fun a -> FSharpValue.MakeUnion (case, a, bindingFlags) |> Some
+            |> create case |> Some
           | _ -> None)
       |> function Some obj -> obj | _ -> fail ()
-    | Deserialization.Record fields, JsonValue.Record src ->
-      let values =
-        fields
-        |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
-        |> Array.map (fun (elmType, (_, obj)) -> deserializeByType custom elmType obj)
-      FSharpValue.MakeRecord (t, values, true)
-    | Deserialization.Tuple elmTypes, JsonValue.Array src when src.Length = elmTypes.Length ->
+    | Deserialization.Record (fields, create), JsonValue.Record src ->
+      fields
+      |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
+      |> Array.map (fun (elmType, (_, obj)) -> deserializeByType custom elmType obj)
+      |> create
+    | Deserialization.Tuple (elmTypes, create), JsonValue.Array src when src.Length = elmTypes.Length ->
       Array.zip elmTypes src
       |> Array.map (fun (t, json) -> deserializeByType custom t json)
-      |> fun values -> FSharpValue.MakeTuple (values, t)
+      |> create
     | Deserialization.String,   JsonValue.String s -> s :> obj
     | Deserialization.Bool,     JsonValue.Boolean b -> b :> obj
     | Deserialization.Int,      JsonValue.Number n -> int n :> obj

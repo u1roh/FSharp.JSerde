@@ -14,7 +14,7 @@ type A =
   | Case6 of string[]
   | Case7 of int option
 
-and B = {
+and B = private {
   Foo: int
   Bar: string
 }
