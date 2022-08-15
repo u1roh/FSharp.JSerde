@@ -35,3 +35,8 @@ printfn "json = %O" json
 let parsed = JSerde.fromJsonString<RecordType> None json
 printfn "parsed = %A" parsed
 ```
+
+Output:
+```
+json = {"A":"hello","B":123,"C":{"111":"Case1","222":null,"333":{"Case2":"bye"},"444":{"Case3":{"Bar":true,"Foo":555}}}}
+```
