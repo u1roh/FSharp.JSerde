@@ -1,11 +1,13 @@
 namespace FSharp.JSerde
 open FSharp.Data
 
+/// Interface of custom serializer. The instances can be created by `JSerde.custom` function.
 type ICustomSerializer =
   abstract TargetType: System.Type
   abstract Serialize: obj -> JsonValue
   abstract Deserialize: JsonValue -> obj
 
+/// Collection of `ICustomSerializer`. `JSerde`'s `serialize`/`deserialize` can be customized by this.
 type Serializer (customs: ICustomSerializer seq) =
   let customs = customs |> Seq.map (fun item -> item.TargetType, item) |> readOnlyDict 
 

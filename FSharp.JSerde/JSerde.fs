@@ -2,6 +2,7 @@ module FSharp.JSerde.JSerde
 open Microsoft.FSharp.Reflection
 open FSharp.Data
 
+/// Create custom serializer
 let custom<'a> (serialize: 'a -> JsonValue) (deserialize: JsonValue -> 'a) =
   { new ICustomSerializer with
       member _.TargetType = typeof<'a>
@@ -12,6 +13,7 @@ exception UnsupportedType of System.Type
 
 let private bindingFlags = System.Reflection.BindingFlags.Public ||| System.Reflection.BindingFlags.NonPublic
 
+/// Serialize F# value into `FSharp.Data.JsonValue`
 let rec serialize (custom : Serializer option) (obj: obj) =
   if isNull obj then JsonValue.Null else
   match custom |> Option.bind (fun c -> c.Serialize obj) with
@@ -152,4 +154,5 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
     | DesUtil.Parsable parse, JsonValue.String s -> parse s
     | _ -> fail ()
 
+/// Deserialize `FSharp.Data.JsonValue` into F# type
 let deserialize<'a> custom json = deserializeByType custom typeof<'a> json :?> 'a
