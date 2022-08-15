@@ -5,6 +5,7 @@ open FSharp.Data
 open FSharp.JSerde
 
 type A =
+  private
   | Case1
   | Case2 of int
   | Case3 of hoge:string * piyo:float

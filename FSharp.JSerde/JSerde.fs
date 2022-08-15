@@ -119,17 +119,17 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
     | Deserialization.Union cases, JsonValue.String name ->
       cases
       |> Array.tryFind (fun case -> case.Name = name && case.GetFields().Length = 0)
-      |> function Some case -> FSharpValue.MakeUnion (case, [||]) | _ -> fail()
+      |> function Some case -> FSharpValue.MakeUnion (case, [||], bindingFlags) | _ -> fail()
     | Deserialization.Union cases, JsonValue.Record [| name, json |] ->
       cases
       |> Array.tryFind (fun case -> case.Name = name)
       |> Option.bind (fun case ->
           match case.GetFields(), json with
-          | [| field |], _ -> FSharpValue.MakeUnion (case, [| deserializeByType custom field.PropertyType json |]) |> Some
+          | [| field |], _ -> FSharpValue.MakeUnion (case, [| deserializeByType custom field.PropertyType json |], bindingFlags) |> Some
           | fields, JsonValue.Array a when fields.Length = a.Length -> 
             Array.zip fields a
             |> Array.map (fun (field, json) -> deserializeByType custom field.PropertyType json)
-            |> fun a -> FSharpValue.MakeUnion (case, a) |> Some
+            |> fun a -> FSharpValue.MakeUnion (case, a, bindingFlags) |> Some
           | _ -> None)
       |> function Some obj -> obj | _ -> fail ()
     | Deserialization.Record fields, JsonValue.Record src ->
