@@ -123,69 +123,70 @@ type Type =
   | Union of UnionCaseInfo[]
   | Record of System.Reflection.PropertyInfo[]
   | Tuple of System.Type[]
+  | Parsable of (string -> obj)
+  | String
+  | Bool
+  | Int
+  | Float
+  | Decimal
   | Other
 
 module Type =
-  let classify (t: System.Type) =
-    if t.IsArray && t.HasElementType then
-      t.GetElementType () |> Array
-    elif FSharpType.IsUnion (t, bindingFlags) then
-      FSharpType.GetUnionCases (t, true) |> Union
-    elif FSharpType.IsRecord (t, bindingFlags) then
-      FSharpType.GetRecordFields (t, bindingFlags) |> Record
-    elif FSharpType.IsTuple t then
-      FSharpType.GetTupleElements t |> Tuple
-    else if t.IsGenericType then
-      match t.GetGenericTypeDefinition() with
-      | def when def = typedefof<option<_>> -> Option (t.GenericTypeArguments[0], createOption t)
-      | def when def = typedefof<list<_>>   -> List (t.GenericTypeArguments[0], createList t)
-      | def when def = typedefof<Map<_, _>> -> Map (t.GenericTypeArguments[0], t.GenericTypeArguments[1], createMap t)
-      | _ -> Other
-    else Other
+  let private primitiveTypes =
+    [ typeof<string>, String
+      typeof<bool>, Bool
+      typeof<int>, Int
+      typeof<float>, Float
+      typeof<decimal>, Decimal
+    ] |> readOnlyDict
 
+  let classify (t: System.Type) =
+    let genericDef = if t.IsGenericType then t.GetGenericTypeDefinition() |> Some else None
+    match t, genericDef with
+    | t, _ when primitiveTypes.ContainsKey t -> primitiveTypes[t]
+    | t, _ when t.IsArray && t.HasElementType -> t.GetElementType () |> Array
+    | _, Some def when def = typedefof<option<_>> -> Option (t.GenericTypeArguments[0], createOption t)
+    | _, Some def when def = typedefof<list<_>>   -> List (t.GenericTypeArguments[0], createList t)
+    | _, Some def when def = typedefof<Map<_, _>> -> Map (t.GenericTypeArguments[0], t.GenericTypeArguments[1], createMap t)
+    | t, _ when FSharpType.IsUnion (t, bindingFlags) -> FSharpType.GetUnionCases (t, true) |> Union
+    | t, _ when FSharpType.IsRecord (t, bindingFlags) -> FSharpType.GetRecordFields (t, bindingFlags) |> Record
+    | t, _ when FSharpType.IsTuple t -> FSharpType.GetTupleElements t |> Tuple
+    | _ ->
+      let parse = t.GetMethod ("Parse", [| typeof<string> |])
+      if not (isNull parse)
+        then Parsable (fun (s: string) -> parse.Invoke (null, [| s |]))
+        else Other
 
 let rec private deserializeByType (custom: Serializer option) (t: System.Type) (json: JsonValue) : obj =
   let fail () = TypeMismatched (t, json) |> raise
   match custom |> Option.bind (fun c -> c.Deserialize (t, json)) with
   | Some obj -> obj
   | _ ->
-    if t.IsArray && t.HasElementType then
-      match json with
-      | JsonValue.Array src ->
-        let elmType = t.GetElementType()
-        let dst = System.Array.CreateInstance (elmType, src.Length)
-        src |> Array.iteri (fun i obj -> dst.SetValue(deserializeByType custom elmType obj, i))
-        dst :> obj
-      | _ -> fail()
-    elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<option<_>> then
+    match Type.classify t, json with
+    | Array elmType, JsonValue.Array src ->
+      let dst = System.Array.CreateInstance (elmType, src.Length)
+      src |> Array.iteri (fun i obj -> dst.SetValue(deserializeByType custom elmType obj, i))
+      dst :> obj
+    | Option (elmType, createOption), json ->
       if json = JsonValue.Null
         then None
-        else deserializeByType custom t.GenericTypeArguments[0] json |> Some 
-      |> createOption t
-    elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<list<_>> then
-      match json with
-      | JsonValue.Array src ->
-        src
-        |> Array.map (deserializeByType custom t.GenericTypeArguments[0])
-        |> createList t
-      | _ -> fail()
-    elif t.IsGenericType && t.GetGenericTypeDefinition() = typedefof<Map<_, _>> then
-      match json with
-      | JsonValue.Record src ->
-        let keyType = t.GenericTypeArguments[0]
-        let valueType = t.GenericTypeArguments[1]
-        src
-        |> Array.map (fun (key, value) ->
-          let key =
-            JsonValue.TryParse key
-            |> Option.map (deserializeByType custom keyType)
-            |> Option.defaultValue key
-          let value = deserializeByType custom valueType value
-          key, value)
-        |> createMap t
-      | _ -> fail()
-    elif FSharpType.IsUnion (t, bindingFlags) then
-      let cases = FSharpType.GetUnionCases (t, true)
+        else deserializeByType custom elmType json |> Some 
+      |> createOption
+    | List (elmType, createList), JsonValue.Array src ->
+      src
+      |> Array.map (deserializeByType custom elmType)
+      |> createList
+    | Map (keyType, valueType, createMap), JsonValue.Record src ->
+      src
+      |> Array.map (fun (key, value) ->
+        let key =
+          JsonValue.TryParse key
+          |> Option.map (deserializeByType custom keyType)
+          |> Option.defaultValue key
+        let value = deserializeByType custom valueType value
+        key, value)
+      |> createMap
+    | Union cases, json ->
       if cases.Length = 1 then // single case union
         match cases[0].GetFields(), json with
         | [| field |], _ ->
@@ -215,46 +216,25 @@ let rec private deserializeByType (custom: Serializer option) (t: System.Type) (
               | _ -> fail()
             | _ -> fail()
         | _ -> fail()
-    elif FSharpType.IsRecord (t, bindingFlags) then
-      match json with
-      | JsonValue.Record src ->
-        let values =
-          FSharpType.GetRecordFields (t, bindingFlags)
-          |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
-          |> Array.map (fun (elmType, (_, obj)) -> deserializeByType custom elmType obj)
-        FSharpValue.MakeRecord (t, values, true)
-      | _ -> fail ()
-    elif FSharpType.IsTuple t then
-      let elmTypes = FSharpType.GetTupleElements t
-      match json with
-      | JsonValue.Array src when src.Length = elmTypes.Length ->
-        Array.zip elmTypes src
-        |> Array.map (fun (t, json) -> deserializeByType custom t json)
-        |> fun values -> FSharpValue.MakeTuple (values, t)
-      | _ -> fail ()
-    else
-      match json with
-      | JsonValue.String s ->
-        if t = typeof<string> then
-          s :> obj
-        else
-          let parse = t.GetMethod ("Parse", [| typeof<string> |])
-          if not (isNull parse) then
-            parse.Invoke (null, [| s |])
-          else
-            fail ()
-      | JsonValue.Boolean b ->
-        if t = typeof<bool> then b :> obj else fail ()
-      | JsonValue.Number n ->
-        if    t = typeof<decimal> then n :> obj
-        elif  t = typeof<int>     then int n :> obj
-        elif  t = typeof<float>   then float n :> obj
-        else fail ()
-      | JsonValue.Float n ->
-        if    t = typeof<decimal> then n :> obj
-        elif  t = typeof<int>     then int n :> obj
-        elif  t = typeof<float>   then float n :> obj
-        else fail ()
-      | _ -> fail ()
+    | Record fields, JsonValue.Record src ->
+      let values =
+        fields
+        |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
+        |> Array.map (fun (elmType, (_, obj)) -> deserializeByType custom elmType obj)
+      FSharpValue.MakeRecord (t, values, true)
+    | Tuple elmTypes, JsonValue.Array src when src.Length = elmTypes.Length ->
+      Array.zip elmTypes src
+      |> Array.map (fun (t, json) -> deserializeByType custom t json)
+      |> fun values -> FSharpValue.MakeTuple (values, t)
+    | String,   JsonValue.String s -> s :> obj
+    | Bool,     JsonValue.Boolean b -> b :> obj
+    | Int,      JsonValue.Number n -> int n :> obj
+    | Float,    JsonValue.Number n -> float n :> obj
+    | Decimal,  JsonValue.Number n -> n :> obj
+    | Int,      JsonValue.Float n -> int n :> obj
+    | Float,    JsonValue.Float n -> n :> obj
+    | Decimal,  JsonValue.Float n -> decimal n :> obj
+    | Parsable parse, JsonValue.String s -> parse s
+    | _ -> fail ()
 
 let deserialize<'a> custom json = deserializeByType custom typeof<'a> json :?> 'a
