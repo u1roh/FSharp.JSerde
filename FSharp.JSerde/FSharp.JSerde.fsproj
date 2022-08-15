@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <Compile Include="CustomSerializer.fs" />
-    <Compile Include="Deserialization.fs" />
+    <Compile Include="DesUtil.fs" />
     <Compile Include="JSerde.fs" />
   </ItemGroup>
 
