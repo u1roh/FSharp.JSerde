@@ -85,14 +85,14 @@ and private serializeList (custom: Serializer option) obj =
     []
 
 /// Serialize F# value into JSON string
-let toStringWith fmt custom (obj: obj) =
+let toJsonStringWith fmt custom (obj: obj) =
   (toJsonValue custom obj).ToString(if fmt then JsonSaveOptions.None else JsonSaveOptions.DisableFormatting)
 
 /// Serialize F# value into unformatted JSON string
-let toString: _ -> obj -> _ = toStringWith false
+let toJsonString: _ -> obj -> _ = toJsonStringWith false
 
 /// Serialize F# value into formatted JSON string
-let toPrettyString: _ -> obj -> _ = toStringWith true
+let toPrettyJsonString: _ -> obj -> _ = toJsonStringWith true
 
 
 // ------------------------------------------------------------------------
@@ -179,6 +179,6 @@ let fromJsonValue<'a> custom json = fromJsonValueByType custom typeof<'a> json :
 
 
 /// Deserialize JSON string into F# type
-let fromString<'a> custom json =
+let fromJsonString<'a> custom json =
   JsonValue.Parse json
   |> fromJsonValue<'a> custom
