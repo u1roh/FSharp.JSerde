@@ -1,13 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>Library</OutputType>
     <TargetFramework>net6.0</TargetFramework>
+    <PackageId>FSharp.JSerde</PackageId>
+    <Version>0.0.1</Version>
+    <Authors>Yuichio Terada (u1roh)</Authors>
+    <PackageDescription>JSON serialization/deserialization for F# types</PackageDescription>
+    <RepositoryUrl>https://github.com/u1roh/FSharp.JSerde</RepositoryUrl>
+    <RootNamespace>FSharp.JSerde</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="JSerde.fs" />
-    <Compile Include="Program.fs" />
   </ItemGroup>
 
   <ItemGroup>

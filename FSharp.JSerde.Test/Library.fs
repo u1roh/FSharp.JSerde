@@ -2,6 +2,7 @@
 
 open NUnit.Framework
 open FSharp.Data
+open FSharp.JSerde
 
 type A =
   | Case1
@@ -20,11 +21,11 @@ and B = {
 type SingleCaseUnion = private SingleCaseUnion of int
 
 let test<'a> (value: 'a) (json: JsonValue) =
-  match json, FSharp.JSerde.serialize value with
+  match json, JSerde.serialize value with
   | JsonValue.Record lhs, JsonValue.Record rhs -> Assert.AreEqual (Map lhs, Map rhs)
   | lhs, rhs -> Assert.AreEqual (lhs, rhs)
 
-  Assert.AreEqual (value, FSharp.JSerde.deserialize<'a> json)
+  Assert.AreEqual (value, JSerde.deserialize<'a> json)
 
 [<Test>]
 let ``A.Case1`` () =
