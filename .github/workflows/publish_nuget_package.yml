@@ -1,0 +1,30 @@
+name: Publish NuGet package
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: "6.0.x"
+
+      - name: Install dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Pack
+        run: dotnet pack -o package/
+
+      - name: Publish to GitHub Packages
+        run: |
+          dotnet nuget push "package/FSharp.JSerde.*.nupkg" --skip-duplicate \
+            --api-key ${{ secrets.NUGET_ORG_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json
