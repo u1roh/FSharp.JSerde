@@ -1,0 +1,68 @@
+module internal FSharp.JSerde.Deserialization
+open Microsoft.FSharp.Reflection
+
+let private bindingFlags = System.Reflection.BindingFlags.Public ||| System.Reflection.BindingFlags.NonPublic
+
+let private createList (t: System.Type) (src: obj[]) =
+  let cons = t.GetMethod "Cons"
+  let empty = (t.GetProperty "Empty").GetValue null
+  Array.foldBack (fun item list -> cons.Invoke (null, [| item; list |])) src empty
+
+let private createOption (t: System.Type) (src: obj option) =
+  let cases = FSharpType.GetUnionCases t
+  match src with
+  | Some obj -> FSharpValue.MakeUnion (cases[1], [| obj |])
+  | None -> FSharpValue.MakeUnion (cases[0], [||])
+
+let private createMap (t: System.Type) (src: (obj * obj)[]) =
+  let ctor = t.GetConstructors()[0]
+  let tupleType = FSharpType.MakeTupleType t.GenericTypeArguments
+  let dst = System.Array.CreateInstance (tupleType, src.Length)
+  src |> Array.iteri (fun i (key, value) ->
+    dst.SetValue(FSharpValue.MakeTuple ([| key; value |], tupleType), i))
+  ctor.Invoke [| dst |]
+
+type Type =
+  | Array of elmType:System.Type
+  | Option of System.Type * createOption:(obj option -> obj)
+  | List of System.Type * createList:(obj[] -> obj)
+  | Map of key:System.Type * value:System.Type * createMap:((obj * obj)[] -> obj)
+  | SingleCaseUnion of fields:System.Reflection.PropertyInfo[] * create:(obj[] -> obj)
+  | Union of UnionCaseInfo[]
+  | Record of System.Reflection.PropertyInfo[]
+  | Tuple of System.Type[]
+  | Parsable of (string -> obj)
+  | String
+  | Bool
+  | Int
+  | Float
+  | Decimal
+  | Other
+
+let private primitiveTypes =
+  [ typeof<string>, String
+    typeof<bool>, Bool
+    typeof<int>, Int
+    typeof<float>, Float
+    typeof<decimal>, Decimal
+  ] |> readOnlyDict
+
+let classify (t: System.Type) =
+  let genericDef = if t.IsGenericType then t.GetGenericTypeDefinition() |> Some else None
+  match t, genericDef with
+  | t, _ when primitiveTypes.ContainsKey t -> primitiveTypes[t]
+  | t, _ when t.IsArray && t.HasElementType -> t.GetElementType () |> Array
+  | _, Some def when def = typedefof<option<_>> -> Option (t.GenericTypeArguments[0], createOption t)
+  | _, Some def when def = typedefof<list<_>>   -> List (t.GenericTypeArguments[0], createList t)
+  | _, Some def when def = typedefof<Map<_, _>> -> Map (t.GenericTypeArguments[0], t.GenericTypeArguments[1], createMap t)
+  | t, _ when FSharpType.IsUnion (t, bindingFlags) ->
+    match FSharpType.GetUnionCases (t, true) with
+    | [| case |] -> SingleCaseUnion (case.GetFields(), fun args -> FSharpValue.MakeUnion (case, args, bindingFlags))
+    | cases -> Union cases
+  | t, _ when FSharpType.IsRecord (t, bindingFlags) -> FSharpType.GetRecordFields (t, bindingFlags) |> Record
+  | t, _ when FSharpType.IsTuple t -> FSharpType.GetTupleElements t |> Tuple
+  | _ ->
+    let parse = t.GetMethod ("Parse", [| typeof<string> |])
+    if not (isNull parse)
+      then Parsable (fun (s: string) -> parse.Invoke (null, [| s |]))
+      else Other

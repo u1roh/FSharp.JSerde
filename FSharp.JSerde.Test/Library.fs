@@ -134,5 +134,5 @@ let datetimeByCustom () =
       (fun value -> value.Ticks |> decimal |> JsonValue.Number)
       (function JsonValue.Number ticks -> int64 ticks |> System.DateTime | _ -> failwith "DateTime format error")
     |> Seq.singleton
-    |> JSerde.Serializer
+    |> Serializer
   testBy (Some custom) value json
