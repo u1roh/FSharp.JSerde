@@ -56,6 +56,8 @@ let rec serialize (obj: obj) =
         | [||] -> JsonValue.String case.Name
         | [| item |] -> JsonValue.Record [| case.Name, serialize item |]
         | array -> JsonValue.Record [| case.Name, array |> Array.map serialize |> JsonValue.Array |]
+    elif t.GetMethod ("Parse", [| typeof<string> |]) |> isNull |> not then
+      obj.ToString() |> JsonValue.String
     else
       raise (UnsupportedType t)
 
@@ -68,7 +70,7 @@ and private serializeList obj =
 
 exception TypeMismatched of System.Type * JsonValue
 
-let rec deserializeByType (t: System.Type) (json: JsonValue) : obj =
+let rec private deserializeByType (t: System.Type) (json: JsonValue) : obj =
   let fail () = TypeMismatched (t, json) |> raise
   if t.IsArray && t.HasElementType then
     match json with
@@ -163,12 +165,12 @@ let rec deserializeByType (t: System.Type) (json: JsonValue) : obj =
     | JsonValue.String s ->
       if t = typeof<string> then
         s :> obj
-      elif FSharpType.IsUnion (t, bindingFlags) then
-        FSharpType.GetUnionCases (t, true)
-        |> Array.tryFind (fun case -> case.Name = s && case.GetFields().Length = 0)
-        |> function Some case -> FSharpValue.MakeUnion (case, [||]) | _ -> fail()
       else
-        fail ()
+        let parse = t.GetMethod ("Parse", [| typeof<string> |])
+        if not (isNull parse) then
+          parse.Invoke (null, [| s |])
+        else
+          fail ()
     | JsonValue.Boolean b ->
       if t = typeof<bool> then b :> obj else fail ()
     | JsonValue.Number n ->

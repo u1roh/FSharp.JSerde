@@ -111,3 +111,14 @@ let singleCaseUnion () =
   test
     (Map [SingleCaseUnion 1010, 3.21; SingleCaseUnion 2020, 6.54])
     (JsonValue.Record [| "1010", JsonValue.Float 3.21; "2020", JsonValue.Float 6.54 |])
+
+[<Test>]
+let guid () =
+  let guid = System.Guid.NewGuid()
+  test guid (JsonValue.String (guid.ToString()))
+
+[<Test>]
+let datetime () =
+  let value = System.DateTime(2022, 8, 15, 12, 34, 56)
+  let json = JsonValue.String "2022/08/15 12:34:56" // default format of DateTime.ToString()
+  test value json
