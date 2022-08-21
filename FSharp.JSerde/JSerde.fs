@@ -25,11 +25,21 @@ let rec toJsonValue (custom : Serializer option) (obj: obj) =
   | Some json -> json
   | _ ->
     match obj with
+    | :? string as value -> JsonValue.String value
     | :? bool as value -> JsonValue.Boolean value
     | :? int as value -> JsonValue.Number (decimal value)
+    | :? uint as value -> JsonValue.Number (decimal value)
+    | :? double as value -> JsonValue.Float value
+    | :? single as value -> JsonValue.Float (double value)
     | :? decimal as value -> JsonValue.Number value
-    | :? float as value -> JsonValue.Float value
-    | :? string as value -> JsonValue.String value
+    | :? int64 as value -> JsonValue.Number (decimal value)
+    | :? uint64 as value -> JsonValue.Number (decimal value)
+    | :? int16 as value -> JsonValue.Number (decimal value)
+    | :? uint16 as value -> JsonValue.Number (decimal value)
+    | :? byte as value -> JsonValue.Number (decimal value)
+    | :? sbyte as value -> JsonValue.Number (decimal value)
+    | :? nativeint as value -> JsonValue.Number (decimal value)
+    | :? unativeint as value -> JsonValue.Number (decimal value)
     | :? System.Array as a -> Array.init a.Length (fun i -> a.GetValue i |> toJsonValue custom) |> JsonValue.Array
     | _ ->
       let t = obj.GetType()
@@ -99,7 +109,9 @@ let toPrettyJsonString: _ -> obj -> _ = toJsonStringWith true
 // deserialization
 
 
-exception TypeMismatch of System.Type * JsonValue
+exception TypeMismatch of Type:System.Type * Json:JsonValue with
+  override this.Message =
+    sprintf "`%s` doesn't match with %A" this.Type.FullName this.Json
 
 let rec private fromJsonValueByType (custom: Serializer option) (t: System.Type) (json: JsonValue) : obj =
   let fail () = TypeMismatch (t, json) |> raise
@@ -165,12 +177,32 @@ let rec private fromJsonValueByType (custom: Serializer option) (t: System.Type)
       |> create
     | DesUtil.String,   JsonValue.String s -> s :> obj
     | DesUtil.Bool,     JsonValue.Boolean b -> b :> obj
-    | DesUtil.Int,      JsonValue.Number n -> int n :> obj
-    | DesUtil.Float,    JsonValue.Number n -> float n :> obj
+    | DesUtil.Byte,     JsonValue.Number n -> byte   n :> obj
+    | DesUtil.Byte,     JsonValue.Float  n -> byte   n :> obj
+    | DesUtil.SByte,    JsonValue.Number n -> sbyte  n :> obj
+    | DesUtil.SByte,    JsonValue.Float  n -> sbyte  n :> obj
+    | DesUtil.Int16,    JsonValue.Number n -> int16  n :> obj
+    | DesUtil.Int16,    JsonValue.Float  n -> int16  n :> obj
+    | DesUtil.UInt16,   JsonValue.Number n -> uint16 n :> obj
+    | DesUtil.UInt16,   JsonValue.Float  n -> uint16 n :> obj
+    | DesUtil.Int32,    JsonValue.Number n -> int    n :> obj
+    | DesUtil.Int32,    JsonValue.Float  n -> int    n :> obj
+    | DesUtil.UInt32,   JsonValue.Number n -> uint   n :> obj
+    | DesUtil.UInt32,   JsonValue.Float  n -> uint   n :> obj
+    | DesUtil.Int64,    JsonValue.Number n -> int64  n :> obj
+    | DesUtil.Int64,    JsonValue.Float  n -> int64  n :> obj
+    | DesUtil.UInt64,   JsonValue.Number n -> uint64 n :> obj
+    | DesUtil.UInt64,   JsonValue.Float  n -> uint64 n :> obj
+    | DesUtil.Double,   JsonValue.Number n -> double n :> obj
+    | DesUtil.Double,   JsonValue.Float  n -> n :> obj
+    | DesUtil.Single,   JsonValue.Number n -> single n :> obj
+    | DesUtil.Single,   JsonValue.Float  n -> single n :> obj
     | DesUtil.Decimal,  JsonValue.Number n -> n :> obj
-    | DesUtil.Int,      JsonValue.Float n -> int n :> obj
-    | DesUtil.Float,    JsonValue.Float n -> n :> obj
-    | DesUtil.Decimal,  JsonValue.Float n -> decimal n :> obj
+    | DesUtil.Decimal,  JsonValue.Float  n -> decimal n :> obj
+    | DesUtil.IntPtr,   JsonValue.Number n -> nativeint  (int64 n) :> obj
+    | DesUtil.IntPtr,   JsonValue.Float  n -> nativeint  n :> obj
+    | DesUtil.UIntPtr,  JsonValue.Number n -> unativeint (int64 n) :> obj
+    | DesUtil.UIntPtr,  JsonValue.Float  n -> unativeint n :> obj
     | DesUtil.Parsable parse, JsonValue.String s -> parse s
     | _ -> fail ()
 

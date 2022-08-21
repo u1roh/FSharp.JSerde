@@ -139,6 +139,25 @@ let datetimeByCustom () =
   testBy (Some custom) value json
 
 
+[<Test>]
+let primitiveTypes () =
+  test true  (JsonValue.Boolean true)
+  test false (JsonValue.Boolean false)
+  test 123uy (JsonValue.Number (decimal 123))
+  test 123y  (JsonValue.Number (decimal 123))
+  test 123s  (JsonValue.Number (decimal 123))
+  test 123us (JsonValue.Number (decimal 123))
+  test 123   (JsonValue.Number (decimal 123))
+  test 123u  (JsonValue.Number (decimal 123))
+  test 123L  (JsonValue.Number (decimal 123))
+  test 123UL (JsonValue.Number (decimal 123))
+  test 12.3m (JsonValue.Number 12.3m)
+  test 12.3  (JsonValue.Float 12.3)
+  test 12.3f (JsonValue.Float (double 12.3f))
+  test (nativeint  123) (JsonValue.Number (decimal 123))
+  test (unativeint 123) (JsonValue.Number (decimal 123))
+  test 'c' (JsonValue.String "c")
+
 module Example =
 
   type UnionType =

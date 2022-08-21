@@ -40,17 +40,37 @@ type Type =
   | Parsable of (string -> obj)
   | String
   | Bool
-  | Int
-  | Float
+  | Byte
+  | SByte
+  | Int16
+  | UInt16
+  | Int32
+  | UInt32
+  | Int64
+  | UInt64
+  | Double
+  | Single
   | Decimal
+  | IntPtr
+  | UIntPtr
   | Other
 
 let private primitiveTypes =
   [ typeof<string>, String
-    typeof<bool>, Bool
-    typeof<int>, Int
-    typeof<float>, Float
+    typeof<bool>,   Bool
+    typeof<byte>,   Byte
+    typeof<sbyte>,  SByte
+    typeof<int16>,  Int16
+    typeof<uint16>, UInt16
+    typeof<int32>,  Int32
+    typeof<uint32>, UInt32
+    typeof<int64>,  Int64
+    typeof<uint64>, UInt64
+    typeof<double>, Double
+    typeof<single>, Single
     typeof<decimal>, Decimal
+    typeof<nativeint>,  IntPtr
+    typeof<unativeint>, UIntPtr
   ] |> readOnlyDict
 
 let classify (t: System.Type) =
