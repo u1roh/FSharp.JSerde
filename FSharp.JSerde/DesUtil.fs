@@ -39,6 +39,7 @@ type Type =
   | Tuple of System.Type[] * createTuple:(obj[] -> obj)
   | Parsable of (string -> obj)
   | String
+  | Char
   | Bool
   | Byte
   | SByte
@@ -57,6 +58,7 @@ type Type =
 
 let private primitiveTypes =
   [ typeof<string>, String
+    typeof<char>,   Char
     typeof<bool>,   Bool
     typeof<byte>,   Byte
     typeof<sbyte>,  SByte

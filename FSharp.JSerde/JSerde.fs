@@ -26,6 +26,7 @@ let rec toJsonValue (custom : Serializer option) (obj: obj) =
   | _ ->
     match obj with
     | :? string as value -> JsonValue.String value
+    | :? char as value -> JsonValue.String (string value)
     | :? bool as value -> JsonValue.Boolean value
     | :? int as value -> JsonValue.Number (decimal value)
     | :? uint as value -> JsonValue.Number (decimal value)
@@ -176,6 +177,7 @@ let rec private fromJsonValueByType (custom: Serializer option) (t: System.Type)
       |> Array.map (fun (t, json) -> fromJsonValueByType custom t json)
       |> create
     | DesUtil.String,   JsonValue.String s -> s :> obj
+    | DesUtil.Char,     JsonValue.String s -> s[0] :> obj
     | DesUtil.Bool,     JsonValue.Boolean b -> b :> obj
     | DesUtil.Byte,     JsonValue.Number n -> byte   n :> obj
     | DesUtil.Byte,     JsonValue.Float  n -> byte   n :> obj
