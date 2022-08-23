@@ -70,6 +70,7 @@ let rec toJsonValue (custom : Serializer option) (obj: obj) =
       elif FSharpType.IsRecord (t, bindingFlags) then
         FSharpType.GetRecordFields (t, bindingFlags)
         |> Array.map (fun prop -> prop.Name, FSharpValue.GetRecordField (obj, prop) |> toJsonValue custom)
+        |> Array.filter (snd >> (<>) JsonValue.Null)
         |> JsonValue.Record
       elif FSharpType.IsUnion (t, bindingFlags) then
         let case, fields = FSharpValue.GetUnionFields (obj, t, true)
@@ -174,8 +175,11 @@ let rec private fromJsonValueByType (custom: Serializer option) (t: System.Type)
       |> function Some obj -> obj | _ -> fail ()
     | DesUtil.Record (fields, create), JsonValue.Record src ->
       fields
-      |> Array.map (fun field -> field.PropertyType, src |> Array.find (fst >> (=) field.Name))
-      |> Array.map (fun (elmType, (_, obj)) -> fromJsonValueByType custom elmType obj)
+      |> Array.map (fun field ->
+        src
+        |> Array.tryFind (fst >> (=) field.Name)
+        |> function Some (_, json) -> json | None -> JsonValue.Null
+        |> fromJsonValueByType custom field.PropertyType)
       |> create
     | DesUtil.Tuple (elmTypes, create), JsonValue.Array src when src.Length = elmTypes.Length ->
       Array.zip elmTypes src

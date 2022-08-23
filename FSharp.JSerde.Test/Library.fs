@@ -17,6 +17,7 @@ type A =
 and B = private {
   Foo: int
   Bar: string
+  Buzz: double option
 }
 
 type SingleCaseUnion = private SingleCaseUnion of int
@@ -81,8 +82,8 @@ let ``A.Case7`` () =
 [<Test>]
 let ``B``() =
   test
-    { Foo = 100; Bar = "bar" }
-    (JsonValue.Record [| "Foo", JsonValue.Number (decimal 100); "Bar", JsonValue.String "bar" |])
+    { Foo = 100; Bar = "bar"; Buzz = Some 3.14 }
+    (JsonValue.Record [| "Foo", JsonValue.Number (decimal 100); "Bar", JsonValue.String "bar"; "Buzz", JsonValue.Float 3.14 |])
 
 [<Test>]
 let tuple() =
@@ -150,6 +151,13 @@ let datetimeByCustom () =
     |> Seq.singleton
     |> Serializer
   testBy (Some custom) value json
+
+[<Test>]
+let omitNoneFieldOfRecord() =
+  // JSON doesn't contain "Buzz" because `Buzz` is None
+  test
+    { Foo = 100; Bar = "bar"; Buzz = None }
+    (JsonValue.Record [| "Foo", JsonValue.Number (decimal 100); "Bar", JsonValue.String "bar" |])
 
 
 [<Test>]
