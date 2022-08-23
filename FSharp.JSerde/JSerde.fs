@@ -83,6 +83,11 @@ let rec toJsonValue (custom : Serializer option) (obj: obj) =
           | [||] -> JsonValue.String case.Name
           | [| item |] -> JsonValue.Record [| case.Name, toJsonValue custom item |]
           | array -> JsonValue.Record [| case.Name, array |> Array.map (toJsonValue custom) |> JsonValue.Array |]
+      elif t.IsEnum then
+        let name = System.Enum.GetName (t, obj)
+        if System.String.IsNullOrEmpty name
+          then System.Convert.ChangeType (obj, t.GetEnumUnderlyingType()) |> toJsonValue custom
+          else JsonValue.String name
       elif t.GetMethod ("Parse", [| typeof<string> |]) |> isNull |> not then
         obj.ToString() |> JsonValue.String
       else
@@ -176,6 +181,11 @@ let rec private fromJsonValueByType (custom: Serializer option) (t: System.Type)
       Array.zip elmTypes src
       |> Array.map (fun (t, json) -> fromJsonValueByType custom t json)
       |> create
+    | DesUtil.Enum t, _ ->
+      let mutable value = null
+      match json with
+      | JsonValue.String s when System.Enum.TryParse (t, s, &value) -> value
+      | _ -> System.Enum.ToObject (t, fromJsonValueByType custom (t.GetEnumUnderlyingType()) json)
     | DesUtil.String,   JsonValue.String s -> s :> obj
     | DesUtil.Char,     JsonValue.String s -> s[0] :> obj
     | DesUtil.Bool,     JsonValue.Boolean b -> b :> obj

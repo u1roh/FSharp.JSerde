@@ -37,6 +37,7 @@ type Type =
   | Union of case:UnionCaseInfo[] * createUnion:(UnionCaseInfo -> obj[] -> obj)
   | Record of fields:System.Reflection.PropertyInfo[] * createRecord:(obj[] -> obj)
   | Tuple of System.Type[] * createTuple:(obj[] -> obj)
+  | Enum of System.Type
   | Parsable of (string -> obj)
   | String
   | Char
@@ -80,6 +81,7 @@ let classify (t: System.Type) =
   match t, genericDef with
   | t, _ when primitiveTypes.ContainsKey t -> primitiveTypes[t]
   | t, _ when t.IsArray && t.HasElementType -> let elm = t.GetElementType() in Array (elm, createArray elm)
+  | t, _ when t.IsEnum -> Enum t
   | _, Some def when def = typedefof<option<_>> -> Option (t.GenericTypeArguments[0], createOption t)
   | _, Some def when def = typedefof<list<_>>   -> List (t.GenericTypeArguments[0], createList t)
   | _, Some def when def = typedefof<Map<_, _>> -> Map (t.GenericTypeArguments[0], t.GenericTypeArguments[1], createMap t)

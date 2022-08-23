@@ -21,6 +21,12 @@ and B = private {
 
 type SingleCaseUnion = private SingleCaseUnion of int
 
+type Flags =
+  | A = 0b001uy
+  | B = 0b010uy
+  | C = 0b100uy
+  | BC = 0b110uy
+
 let testBy<'a> custom (value: 'a) (json: JsonValue) =
   match json, JSerde.toJsonValue custom value with
   | JsonValue.Record lhs, JsonValue.Record rhs -> Assert.AreEqual (Map lhs, Map rhs)
@@ -29,6 +35,13 @@ let testBy<'a> custom (value: 'a) (json: JsonValue) =
   Assert.AreEqual (value, JSerde.fromJsonValue<'a> custom json)
 
 let test<'a> = testBy<'a> None
+
+[<Test>]
+let ``enum`` () =
+  test Flags.A (JsonValue.String "A")
+  test Flags.B (JsonValue.String "B")
+  test (Flags.A ||| Flags.B) (JsonValue.Number (decimal 0b011uy))
+  test (Flags.B ||| Flags.C) (JsonValue.String "BC")
 
 [<Test>]
 let ``A.Case1`` () =
