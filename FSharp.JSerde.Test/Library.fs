@@ -21,6 +21,7 @@ and B = private {
 }
 
 type SingleCaseUnion = private SingleCaseUnion of int
+type InvalidSingleCaseUnion = CaseNameDifferentFromTypeName of int
 
 type Flags =
   | A = 0b001uy
@@ -128,6 +129,10 @@ let singleCaseUnion () =
   test
     (Map [SingleCaseUnion 1010, 3.21; SingleCaseUnion 2020, 6.54])
     (JsonValue.Record [| "1010", JsonValue.Float 3.21; "2020", JsonValue.Float 6.54 |])
+
+  test
+    (CaseNameDifferentFromTypeName 333)
+    (JsonValue.Record [| "CaseNameDifferentFromTypeName", JsonValue.Number (decimal 333) |])
 
 [<Test>]
 let guid () =

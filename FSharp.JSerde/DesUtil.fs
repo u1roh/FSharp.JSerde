@@ -87,7 +87,7 @@ let classify (t: System.Type) =
   | _, Some def when def = typedefof<Map<_, _>> -> Map (t.GenericTypeArguments[0], t.GenericTypeArguments[1], createMap t)
   | t, _ when FSharpType.IsUnion (t, bindingFlags) ->
     match FSharpType.GetUnionCases (t, true) with
-    | [| case |] -> SingleCaseUnion (case.GetFields(), fun args -> FSharpValue.MakeUnion (case, args, bindingFlags))
+    | [| case |] when case.Name = t.Name -> SingleCaseUnion (case.GetFields(), fun args -> FSharpValue.MakeUnion (case, args, bindingFlags))
     | cases -> Union (cases, fun case args -> FSharpValue.MakeUnion (case, args, bindingFlags))
   | t, _ when FSharpType.IsRecord (t, bindingFlags) ->
     Record (FSharpType.GetRecordFields (t, bindingFlags), fun args -> FSharpValue.MakeRecord(t, args, true))

@@ -85,12 +85,13 @@ let rec toJsonValue cfg (obj: obj) =
         |> JsonValue.Record
       elif FSharpType.IsUnion (t, bindingFlags) then
         let case, fields = FSharpValue.GetUnionFields (obj, t, true)
-        if (FSharpType.GetUnionCases (t, true)).Length = 1 then // single case union
+        match FSharpType.GetUnionCases (t, true) with
+        | [| case |] when case.Name = t.Name -> // single case union
           match fields with
           | [||] -> JsonValue.String case.Name
           | [| item |] -> toJsonValue cfg item
           | array -> array |> Array.map (toJsonValue cfg) |> JsonValue.Array
-        else
+        | _ ->
           match fields with
           | [||] -> JsonValue.String case.Name
           | [| item |] -> JsonValue.Record [| case.Name, toJsonValue cfg item |]
