@@ -11,9 +11,14 @@ let custom<'a> (serialize: 'a -> JsonValue) (deserialize: JsonValue -> 'a) =
 
 type Config = {
   Serializer: Serializer
+  Tag: string option
 } with
-  static member Default = { Serializer = Serializer.Empty }
-  static member FromCustomSerializers customs = { Serializer = Serializer customs }
+  static member Default =
+    { Serializer = Serializer.Empty
+      Tag = None }
+
+  static member FromCustomSerializers customs =
+    { Config.Default with Serializer = Serializer customs }
 
 
 // ------------------------------------------------------------------------
@@ -24,7 +29,7 @@ exception UnsupportedType of System.Type
 
 let private bindingFlags = System.Reflection.BindingFlags.Public ||| System.Reflection.BindingFlags.NonPublic
 
-/// Serialize F# value into `FSharp.Data.JsonValue`
+/// Serialize F# value into <c>FSharp.Data.JsonValue</c>
 let rec toJsonValue cfg (obj: obj) =
   if isNull obj then JsonValue.Null else
   match cfg.Serializer.Serialize obj with
@@ -228,7 +233,7 @@ let rec private fromJsonValueByType cfg (t: System.Type) (json: JsonValue) : obj
     | DesUtil.Parsable parse, JsonValue.String s -> parse s
     | _ -> fail ()
 
-/// Deserialize `FSharp.Data.JsonValue` into F# type
+/// Deserialize <c>FSharp.Data.JsonValue</c> into F# type
 let fromJsonValue<'a> cfg json = fromJsonValueByType cfg typeof<'a> json :?> 'a
 
 
