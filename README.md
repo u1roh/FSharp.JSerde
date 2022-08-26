@@ -29,10 +29,10 @@ let value = {
     ] 
 }
 
-let json = JSerde.toJsonString None value
+let json = JSerde.toJsonString JSerde.Config.Default value
 printfn "json = %O" json
 
-let parsed = JSerde.fromJsonString<RecordType> None json
+let parsed = JSerde.fromJsonString<RecordType> JSerde.Config.Default json
 printfn "parsed = %A" parsed
 ```
 
