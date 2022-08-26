@@ -28,14 +28,14 @@ type Flags =
   | C = 0b100uy
   | BC = 0b110uy
 
-let testBy<'a> custom (value: 'a) (json: JsonValue) =
-  match json, JSerde.toJsonValue custom value with
+let testBy<'a> cfg (value: 'a) (json: JsonValue) =
+  match json, JSerde.toJsonValue cfg value with
   | JsonValue.Record lhs, JsonValue.Record rhs -> Assert.AreEqual (Map lhs, Map rhs)
   | lhs, rhs -> Assert.AreEqual (lhs, rhs)
 
-  Assert.AreEqual (value, JSerde.fromJsonValue<'a> custom json)
+  Assert.AreEqual (value, JSerde.fromJsonValue<'a> cfg json)
 
-let test<'a> = testBy<'a> None
+let test<'a> = testBy<'a> JSerde.Config.Default
 
 [<Test>]
 let ``enum`` () =
@@ -144,13 +144,13 @@ let datetime () =
 let datetimeByCustom () =
   let value = System.DateTime.Now
   let json = JsonValue.Number (decimal value.Ticks)
-  let custom =
+  let cfg =
     JSerde.custom<System.DateTime>
       (fun value -> value.Ticks |> decimal |> JsonValue.Number)
       (function JsonValue.Number ticks -> int64 ticks |> System.DateTime | _ -> failwith "DateTime format error")
     |> Seq.singleton
-    |> Serializer
-  testBy (Some custom) value json
+    |> JSerde.Config.FromCustomSerializers
+  testBy cfg value json
 
 [<Test>]
 let omitNoneFieldOfRecord() =
@@ -207,10 +207,10 @@ module Example =
       ] 
     }
 
-    let json = JSerde.toJsonString None value
+    let json = JSerde.toJsonString JSerde.Config.Default value
     // printfn "json = %O" json
 
-    let parsed = JSerde.fromJsonString<RecordType> None json
+    let parsed = JSerde.fromJsonString<RecordType> JSerde.Config.Default json
     // printfn "parsed = %A" parsed
 
     Assert.AreEqual (value, parsed)
