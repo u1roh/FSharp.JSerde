@@ -16,11 +16,11 @@ type UnionTagging = {
 
 type Config = {
   Serializer: Serializer
-  Tag: UnionTagging option
+  UnionTagging: UnionTagging option
 } with
   static member Default =
     { Serializer = Serializer.Empty
-      Tag = None }
+      UnionTagging = None }
 
   static member FromCustomSerializers customs =
     { Config.Default with Serializer = Serializer customs }
@@ -100,7 +100,7 @@ let rec toJsonValue cfg (obj: obj) =
                 | [| item |] -> Some item
                 | array -> JsonValue.Array array |> Some
             case.Name, json
-        match FSharpType.GetUnionCases (t, true), cfg.Tag with
+        match FSharpType.GetUnionCases (t, true), cfg.UnionTagging with
         | [| case |], _ when case.Name = t.Name -> // single case union
           json |> Option.defaultValue (JsonValue.String case.Name)
         | _, Some tag ->
@@ -201,7 +201,7 @@ let rec private fromJsonValueByType cfg (t: System.Type) (json: JsonValue) : obj
           | _ -> None)
       |> function Some obj -> obj | _ -> fail ()
     | DesUtil.Union (cases, create), JsonValue.Record fields ->
-      cfg.Tag
+      cfg.UnionTagging
       |> Option.bind (fun tag ->
         let t = fields |> Array.tryFind (fst >> (=) tag.Tag)
         let c = fields |> Array.tryFind (fst >> (=) tag.Content)

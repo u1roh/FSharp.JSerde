@@ -168,7 +168,7 @@ let omitNoneFieldOfRecord() =
 [<Test>]
 let taggedUnion() =
   let test =
-    let cfg = { JSerde.Config.Default with Tag = Some { Tag = "t"; Content = "c" } }
+    let cfg = { JSerde.Config.Default with UnionTagging = Some { Tag = "t"; Content = "c" } }
     testBy cfg
 
   test Case1 (JsonValue.String "Case1")
