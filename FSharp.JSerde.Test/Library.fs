@@ -21,6 +21,7 @@ and B = private {
 }
 
 type SingleCaseUnion = private SingleCaseUnion of int
+type InvalidSingleCaseUnion = CaseNameDifferentFromTypeName of int
 
 type Flags =
   | A = 0b001uy
@@ -28,14 +29,14 @@ type Flags =
   | C = 0b100uy
   | BC = 0b110uy
 
-let testBy<'a> custom (value: 'a) (json: JsonValue) =
-  match json, JSerde.toJsonValue custom value with
+let testBy<'a> cfg (value: 'a) (json: JsonValue) =
+  match json, JSerde.toJsonValue cfg value with
   | JsonValue.Record lhs, JsonValue.Record rhs -> Assert.AreEqual (Map lhs, Map rhs)
   | lhs, rhs -> Assert.AreEqual (lhs, rhs)
 
-  Assert.AreEqual (value, JSerde.fromJsonValue<'a> custom json)
+  Assert.AreEqual (value, JSerde.fromJsonValue<'a> cfg json)
 
-let test<'a> = testBy<'a> None
+let test<'a> = testBy<'a> JSerde.Config.Default
 
 [<Test>]
 let ``enum`` () =
@@ -129,6 +130,10 @@ let singleCaseUnion () =
     (Map [SingleCaseUnion 1010, 3.21; SingleCaseUnion 2020, 6.54])
     (JsonValue.Record [| "1010", JsonValue.Float 3.21; "2020", JsonValue.Float 6.54 |])
 
+  test
+    (CaseNameDifferentFromTypeName 333)
+    (JsonValue.Record [| "CaseNameDifferentFromTypeName", JsonValue.Number (decimal 333) |])
+
 [<Test>]
 let guid () =
   let guid = System.Guid.NewGuid()
@@ -144,13 +149,13 @@ let datetime () =
 let datetimeByCustom () =
   let value = System.DateTime.Now
   let json = JsonValue.Number (decimal value.Ticks)
-  let custom =
+  let cfg =
     JSerde.custom<System.DateTime>
       (fun value -> value.Ticks |> decimal |> JsonValue.Number)
       (function JsonValue.Number ticks -> int64 ticks |> System.DateTime | _ -> failwith "DateTime format error")
     |> Seq.singleton
-    |> Serializer
-  testBy (Some custom) value json
+    |> JSerde.Config.FromCustomSerializers
+  testBy cfg value json
 
 [<Test>]
 let omitNoneFieldOfRecord() =
@@ -158,6 +163,29 @@ let omitNoneFieldOfRecord() =
   test
     { Foo = 100; Bar = "bar"; Buzz = None }
     (JsonValue.Record [| "Foo", JsonValue.Number (decimal 100); "Bar", JsonValue.String "bar" |])
+
+
+[<Test>]
+let taggedUnion() =
+  let test =
+    let cfg = { JSerde.Config.Default with UnionTagging = Some { Tag = "t"; Content = "c" } }
+    testBy cfg
+
+  test Case1 (JsonValue.String "Case1")
+  test (Case2 123) (JsonValue.Record [| "t", JsonValue.String "Case2"; "c", JsonValue.Number (decimal 123) |])
+
+  test (Case3 ("hoge", 3.14))
+    (JsonValue.Record [|
+      "t", JsonValue.String "Case3"
+      "c", JsonValue.Array [| JsonValue.String "hoge"; JsonValue.Float 3.14 |] |])
+
+  test (Case4 { Foo = 123; Bar = "bar"; Buzz = None })
+    (JsonValue.Record [|
+      "t", JsonValue.String "Case4"
+      "c", JsonValue.Record [| "Foo", JsonValue.Number (decimal 123); "Bar", JsonValue.String "bar" |] |])
+
+  test (Case7 None) (JsonValue.Record [| "t", JsonValue.String "Case7"; "c", JsonValue.Null |])
+  test (Case7 (Some 10)) (JsonValue.Record [| "t", JsonValue.String "Case7"; "c", JsonValue.Number (decimal 10) |])
 
 
 [<Test>]
@@ -207,10 +235,18 @@ module Example =
       ] 
     }
 
-    let json = JSerde.toJsonString None value
+    let json = JSerde.toJsonString JSerde.Config.Default value
     // printfn "json = %O" json
 
-    let parsed = JSerde.fromJsonString<RecordType> None json
+    let parsed = JSerde.fromJsonString<RecordType> JSerde.Config.Default json
     // printfn "parsed = %A" parsed
 
     Assert.AreEqual (value, parsed)
+
+  [<Test>]
+  let testUnionTagging () =
+    let json1 = Case2 "hello" |> JSerde.toJsonString JSerde.Config.Default
+    let json2 = Case2 "hello" |> JSerde.toJsonString { JSerde.Config.Default with UnionTagging = Some { Tag = "t"; Content = "c" } }
+    Assert.AreEqual (json1, "{\"Case2\":\"hello\"}")
+    Assert.AreEqual (json2, "{\"t\":\"Case2\",\"c\":\"hello\"}")
+

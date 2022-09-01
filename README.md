@@ -29,14 +29,31 @@ let value = {
     ] 
 }
 
-let json = JSerde.toJsonString None value
+let json = JSerde.toJsonString JSerde.Config.Default value
 printfn "json = %O" json
 
-let parsed = JSerde.fromJsonString<RecordType> None json
+let parsed = JSerde.fromJsonString<RecordType> JSerde.Config.Default json
 printfn "parsed = %A" parsed
 ```
 
 Output:
 ```
 json = {"A":"hello","B":123,"C":{"111":"Case1","222":null,"333":{"Case2":"bye"},"444":{"Case3":{"Bar":true,"Foo":555}}}}
+```
+
+## Union tagging
+You can configure union type's tagging style by `JSerde.Config`.
+
+```fsharp
+type UnionType =
+    | Case1
+    | Case2 of string
+    | Case3 of {| Foo: int; Bar: bool |}
+
+[<Test>]
+let testUnionTagging () =
+  let json1 = Case2 "hello" |> JSerde.toJsonString JSerde.Config.Default
+  let json2 = Case2 "hello" |> JSerde.toJsonString { JSerde.Config.Default with UnionTagging = Some { Tag = "t"; Content = "c" } }
+  Assert.AreEqual (json1, "{\"Case2\":\"hello\"}")
+  Assert.AreEqual (json2, "{\"t\":\"Case2\",\"c\":\"hello\"}")
 ```
