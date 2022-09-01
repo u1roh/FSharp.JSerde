@@ -242,3 +242,11 @@ module Example =
     // printfn "parsed = %A" parsed
 
     Assert.AreEqual (value, parsed)
+
+  [<Test>]
+  let testUnionTagging () =
+    let json1 = Case2 "hello" |> JSerde.toJsonString JSerde.Config.Default
+    let json2 = Case2 "hello" |> JSerde.toJsonString { JSerde.Config.Default with UnionTagging = Some { Tag = "t"; Content = "c" } }
+    Assert.AreEqual (json1, "{\"Case2\":\"hello\"}")
+    Assert.AreEqual (json2, "{\"t\":\"Case2\",\"c\":\"hello\"}")
+
