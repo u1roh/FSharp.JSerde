@@ -89,24 +89,19 @@ let rec toJsonValue cfg (obj: obj) =
         |> Array.filter (snd >> (<>) JsonValue.Null)
         |> JsonValue.Record
       elif FSharpType.IsUnion (t, bindingFlags) then
-        let case, json =
-          FSharpValue.GetUnionFields (obj, t, true)
-          |> fun (case, fields) ->
-            let json =
-              fields
-              |> Array.map (toJsonValue cfg)
-              |> function
-                | [||] -> None
-                | [| item |] -> Some item
-                | array -> JsonValue.Array array |> Some
-            case.Name, json
-        (match FSharpType.GetUnionCases (t, true), cfg.UnionTagging with
-        | [| case |], _ when case.Name = t.Name -> json // single case union
-        | _, Some tag ->
-          json |> Option.map (fun json -> JsonValue.Record [| tag.Tag, JsonValue.String case; tag.Content, json |])
-        | _ ->
-          json |> Option.map (fun json -> JsonValue.Record [| case, json |]))
-        |> Option.defaultValue (JsonValue.String case)
+        let case, fields = FSharpValue.GetUnionFields (obj, t, true)
+        (match fields |> Array.map (toJsonValue cfg) with
+          | [||] -> None
+          | [| item |] -> Some item
+          | array -> JsonValue.Array array |> Some)
+        |> Option.map (fun json ->
+          match FSharpType.GetUnionCases (t, true) with
+          | [| case |] when case.Name = t.Name -> json // single case union
+          | _ ->
+            match cfg.UnionTagging with
+            | Some { Tag = t; Content = c } -> JsonValue.Record [| t, JsonValue.String case.Name; c, json |]
+            | None -> JsonValue.Record [| case.Name, json |])
+        |> Option.defaultValue (JsonValue.String case.Name)
       elif t.IsEnum then
         let name = System.Enum.GetName (t, obj)
         if System.String.IsNullOrEmpty name
