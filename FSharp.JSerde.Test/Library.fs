@@ -174,6 +174,19 @@ let taggedUnion() =
   test Case1 (JsonValue.String "Case1")
   test (Case2 123) (JsonValue.Record [| "t", JsonValue.String "Case2"; "c", JsonValue.Number (decimal 123) |])
 
+  test (Case3 ("hoge", 3.14))
+    (JsonValue.Record [|
+      "t", JsonValue.String "Case3"
+      "c", JsonValue.Array [| JsonValue.String "hoge"; JsonValue.Float 3.14 |] |])
+
+  test (Case4 { Foo = 123; Bar = "bar"; Buzz = None })
+    (JsonValue.Record [|
+      "t", JsonValue.String "Case4"
+      "c", JsonValue.Record [| "Foo", JsonValue.Number (decimal 123); "Bar", JsonValue.String "bar" |] |])
+
+  test (Case7 None) (JsonValue.Record [| "t", JsonValue.String "Case7"; "c", JsonValue.Null |])
+  test (Case7 (Some 10)) (JsonValue.Record [| "t", JsonValue.String "Case7"; "c", JsonValue.Number (decimal 10) |])
+
 
 [<Test>]
 let primitiveTypes () =
