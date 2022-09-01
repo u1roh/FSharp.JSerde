@@ -9,9 +9,14 @@ let custom<'a> (serialize: 'a -> JsonValue) (deserialize: JsonValue -> 'a) =
       member _.Serialize obj = serialize (obj :?> 'a)
       member _.Deserialize json = deserialize json :> obj }
 
+type UnionTagging = {
+  Tag: string
+  Content: string
+}
+
 type Config = {
   Serializer: Serializer
-  Tag: string option
+  Tag: UnionTagging option
 } with
   static member Default =
     { Serializer = Serializer.Empty
@@ -84,18 +89,28 @@ let rec toJsonValue cfg (obj: obj) =
         |> Array.filter (snd >> (<>) JsonValue.Null)
         |> JsonValue.Record
       elif FSharpType.IsUnion (t, bindingFlags) then
-        let case, fields = FSharpValue.GetUnionFields (obj, t, true)
-        match FSharpType.GetUnionCases (t, true) with
-        | [| case |] when case.Name = t.Name -> // single case union
-          match fields with
-          | [||] -> JsonValue.String case.Name
-          | [| item |] -> toJsonValue cfg item
-          | array -> array |> Array.map (toJsonValue cfg) |> JsonValue.Array
+        let case, json =
+          FSharpValue.GetUnionFields (obj, t, true)
+          |> fun (case, fields) ->
+            let json =
+              fields
+              |> Array.map (toJsonValue cfg)
+              |> function
+                | [||] -> None
+                | [| item |] -> Some item
+                | array -> JsonValue.Array array |> Some
+            case.Name, json
+        match FSharpType.GetUnionCases (t, true), cfg.Tag with
+        | [| case |], _ when case.Name = t.Name -> // single case union
+          json |> Option.defaultValue (JsonValue.String case.Name)
+        | _, Some tag ->
+          json
+          |> Option.map (fun json -> JsonValue.Record [| tag.Tag, JsonValue.String case; tag.Content, json |])
+          |> Option.defaultValue (JsonValue.String case)
         | _ ->
-          match fields with
-          | [||] -> JsonValue.String case.Name
-          | [| item |] -> JsonValue.Record [| case.Name, toJsonValue cfg item |]
-          | array -> JsonValue.Record [| case.Name, array |> Array.map (toJsonValue cfg) |> JsonValue.Array |]
+          json
+          |> Option.map (fun json -> JsonValue.Record [| case, json |])
+          |> Option.defaultValue (JsonValue.String case)
       elif t.IsEnum then
         let name = System.Enum.GetName (t, obj)
         if System.String.IsNullOrEmpty name
@@ -184,6 +199,26 @@ let rec private fromJsonValueByType cfg (t: System.Type) (json: JsonValue) : obj
             |> Array.map (fun (field, json) -> fromJsonValueByType cfg field.PropertyType json)
             |> create case |> Some
           | _ -> None)
+      |> function Some obj -> obj | _ -> fail ()
+    | DesUtil.Union (cases, create), JsonValue.Record fields ->
+      cfg.Tag
+      |> Option.bind (fun tag ->
+        let t = fields |> Array.tryFind (fst >> (=) tag.Tag)
+        let c = fields |> Array.tryFind (fst >> (=) tag.Content)
+        match t, c with
+        | Some (_, JsonValue.String caseName), Some (_, json) -> Some (caseName, json)
+        | _ -> None)
+      |> Option.bind (fun (caseName, json) ->
+        cases
+        |> Array.tryFind (fun case -> case.Name = caseName)
+        |> Option.bind (fun case ->
+          match case.GetFields(), json with
+          | [| field |], _ -> create case [| fromJsonValueByType cfg field.PropertyType json |] |> Some
+          | fields, JsonValue.Array a when fields.Length = a.Length ->
+            Array.zip fields a
+            |> Array.map (fun (field, json) -> fromJsonValueByType cfg field.PropertyType json)
+            |> create case |> Some
+          | _ -> None))
       |> function Some obj -> obj | _ -> fail ()
     | DesUtil.Record (fields, create), JsonValue.Record src ->
       fields

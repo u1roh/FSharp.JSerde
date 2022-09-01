@@ -166,6 +166,16 @@ let omitNoneFieldOfRecord() =
 
 
 [<Test>]
+let taggedUnion() =
+  let test =
+    let cfg = { JSerde.Config.Default with Tag = Some { Tag = "t"; Content = "c" } }
+    testBy cfg
+
+  test Case1 (JsonValue.String "Case1")
+  test (Case2 123) (JsonValue.Record [| "t", JsonValue.String "Case2"; "c", JsonValue.Number (decimal 123) |])
+
+
+[<Test>]
 let primitiveTypes () =
   test true  (JsonValue.Boolean true)
   test false (JsonValue.Boolean false)
