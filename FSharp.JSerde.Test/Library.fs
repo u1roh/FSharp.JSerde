@@ -23,6 +23,11 @@ and B = private {
 type SingleCaseUnion = private SingleCaseUnion of int
 type InvalidSingleCaseUnion = CaseNameDifferentFromTypeName of int
 
+type OnlyLabelUnion =
+  | LabelA
+  | LabelB
+  | LabelC
+
 type Flags =
   | A = 0b001uy
   | B = 0b010uy
@@ -171,7 +176,8 @@ let taggedUnion() =
     let cfg = { JSerde.Config.Default with UnionTagging = Some { Tag = "t"; Content = "c" } }
     testBy cfg
 
-  test Case1 (JsonValue.String "Case1")
+  test Case1 (JsonValue.Record [| "t", JsonValue.String "Case1" |])
+
   test (Case2 123) (JsonValue.Record [| "t", JsonValue.String "Case2"; "c", JsonValue.Number (decimal 123) |])
 
   test (Case3 ("hoge", 3.14))
@@ -186,6 +192,17 @@ let taggedUnion() =
 
   test (Case7 None) (JsonValue.Record [| "t", JsonValue.String "Case7"; "c", JsonValue.Null |])
   test (Case7 (Some 10)) (JsonValue.Record [| "t", JsonValue.String "Case7"; "c", JsonValue.Number (decimal 10) |])
+
+// A simple union whose all cases have no contents is serialized into a simple
+// string, not a tagged object, regardless of whether UnionTagging is configured or not.
+[<Test>]
+let OnlyLabelUnion() =
+  let test =
+    let cfg = { JSerde.Config.Default with UnionTagging = Some { Tag = "t"; Content = "c" } }
+    testBy cfg
+
+  test LabelA (JsonValue.String "LabelA")
+  test LabelB (JsonValue.String "LabelB")
 
 
 [<Test>]
