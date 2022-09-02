@@ -52,8 +52,15 @@ type UnionType =
 
 [<Test>]
 let testUnionTagging () =
-  let json1 = Case2 "hello" |> JSerde.toJsonString JSerde.Config.Default
-  let json2 = Case2 "hello" |> JSerde.toJsonString { JSerde.Config.Default with UnionTagging = Some { Tag = "t"; Content = "c" } }
-  Assert.AreEqual (json1, "{\"Case2\":\"hello\"}")
-  Assert.AreEqual (json2, "{\"t\":\"Case2\",\"c\":\"hello\"}")
+    let taggingCfg = { JSerde.Config.Default with UnionTagging = Some { Tag = "t"; Content = "c" } }
+
+    let json1 = Case1 |> JSerde.toJsonString JSerde.Config.Default
+    let json2 = Case1 |> JSerde.toJsonString taggingCfg
+    Assert.AreEqual (json1, "\"Case1\"")
+    Assert.AreEqual (json2, "{\"t\":\"Case1\"}")
+
+    let json1 = Case2 "hello" |> JSerde.toJsonString JSerde.Config.Default
+    let json2 = Case2 "hello" |> JSerde.toJsonString taggingCfg
+    Assert.AreEqual (json1, "{\"Case2\":\"hello\"}")
+    Assert.AreEqual (json2, "{\"t\":\"Case2\",\"c\":\"hello\"}")
 ```
