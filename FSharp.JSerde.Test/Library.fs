@@ -120,6 +120,15 @@ let option() =
     JsonValue.Null
 
 [<Test>]
+let result() =
+  test
+    (Ok 999)
+    (JsonValue.Record [| "Ok", JsonValue.Number (decimal 999) |])
+  test
+    (Error "oops")
+    (JsonValue.Record [| "Error", JsonValue.String "oops" |])
+
+[<Test>]
 let map () =
   test
     (Map ["foo", 3.21; "bar", 6.54])
