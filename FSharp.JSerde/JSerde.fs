@@ -248,6 +248,10 @@ let rec private fromJsonValueByType cfg (t: System.Type) (json: JsonValue) : obj
     | DesUtil.IntPtr,   JsonValue.Float  n -> nativeint  n :> obj
     | DesUtil.UIntPtr,  JsonValue.Number n -> unativeint (int64 n) :> obj
     | DesUtil.UIntPtr,  JsonValue.Float  n -> unativeint n :> obj
+    | DesUtil.Object,   JsonValue.String s -> s :> obj
+    | DesUtil.Object,   JsonValue.Number n -> n :> obj
+    | DesUtil.Object,   JsonValue.Float  n -> n :> obj
+    | DesUtil.Object,   JsonValue.Null     -> null
     | DesUtil.Parsable parse, JsonValue.String s -> parse s
     | _ -> fail ()
 

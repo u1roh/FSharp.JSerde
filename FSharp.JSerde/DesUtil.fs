@@ -55,6 +55,7 @@ type Type =
   | Decimal
   | IntPtr
   | UIntPtr
+  | Object
   | Other
 
 let private primitiveTypes =
@@ -93,6 +94,7 @@ let classify (t: System.Type) =
     Record (FSharpType.GetRecordFields (t, bindingFlags), fun args -> FSharpValue.MakeRecord(t, args, true))
   | t, _ when FSharpType.IsTuple t ->
     Tuple (FSharpType.GetTupleElements t, fun args -> FSharpValue.MakeTuple (args, t))
+  | _, _ when t = typeof<obj> -> Object
   | _ ->
     let parse = t.GetMethod ("Parse", [| typeof<string> |])
     if not (isNull parse)

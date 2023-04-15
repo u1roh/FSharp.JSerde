@@ -283,3 +283,15 @@ module Example =
     Assert.AreEqual (json1, "{\"Case2\":\"hello\"}")
     Assert.AreEqual (json2, "{\"t\":\"Case2\",\"c\":\"hello\"}")
 
+
+/// https://github.com/u1roh/FSharp.JSerde/issues/2
+[<Test>]
+let ``deserialize Map<string, obj>`` () =
+  let x : Map<string, obj> = """{"hello":"world"}""" |> JSerde.fromJsonString JSerde.Config.Default
+  Assert.AreEqual (x, Map [ "hello", box "world" ])
+
+[<Test>]
+let ``deserialize to obj`` () =
+  test (box "hello") (JsonValue.String "hello")
+  test (box 123) (JsonValue.Number (decimal 123))
+  test (box 3.14) (JsonValue.Float 3.14)
