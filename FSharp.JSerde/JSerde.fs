@@ -58,6 +58,7 @@ let rec toJsonValue cfg (obj: obj) =
     | :? nativeint as value -> JsonValue.Number (decimal value)
     | :? unativeint as value -> JsonValue.Number (decimal value)
     | :? System.Array as a -> Array.init a.Length (fun i -> a.GetValue i |> toJsonValue cfg) |> JsonValue.Array
+    | :? JsonValue as json -> json
     | _ ->
       let t = obj.GetType()
       if FSharpType.IsTuple t then
@@ -252,6 +253,7 @@ let rec private fromJsonValueByType cfg (t: System.Type) (json: JsonValue) : obj
     | DesUtil.Object,   JsonValue.Number n -> n :> obj
     | DesUtil.Object,   JsonValue.Float  n -> n :> obj
     | DesUtil.Object,   JsonValue.Null     -> null
+    | DesUtil.JsonValue, _ -> json :> obj
     | DesUtil.Parsable parse, JsonValue.String s -> parse s
     | _ -> fail ()
 

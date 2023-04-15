@@ -56,6 +56,7 @@ type Type =
   | IntPtr
   | UIntPtr
   | Object
+  | JsonValue
   | Other
 
 let private primitiveTypes =
@@ -86,6 +87,8 @@ let classify (t: System.Type) =
   | _, Some def when def = typedefof<option<_>> -> Option (t.GenericTypeArguments[0], createOption t)
   | _, Some def when def = typedefof<list<_>>   -> List (t.GenericTypeArguments[0], createList t)
   | _, Some def when def = typedefof<Map<_, _>> -> Map (t.GenericTypeArguments[0], t.GenericTypeArguments[1], createMap t)
+  | _, _ when t = typeof<obj> -> Object
+  | _, _ when t = typeof<FSharp.Data.JsonValue> -> JsonValue
   | t, _ when FSharpType.IsUnion (t, bindingFlags) ->
     match FSharpType.GetUnionCases (t, true) with
     | [| case |] when case.Name = t.Name -> SingleCaseUnion (case.GetFields(), fun args -> FSharpValue.MakeUnion (case, args, bindingFlags))
@@ -94,7 +97,6 @@ let classify (t: System.Type) =
     Record (FSharpType.GetRecordFields (t, bindingFlags), fun args -> FSharpValue.MakeRecord(t, args, true))
   | t, _ when FSharpType.IsTuple t ->
     Tuple (FSharpType.GetTupleElements t, fun args -> FSharpValue.MakeTuple (args, t))
-  | _, _ when t = typeof<obj> -> Object
   | _ ->
     let parse = t.GetMethod ("Parse", [| typeof<string> |])
     if not (isNull parse)

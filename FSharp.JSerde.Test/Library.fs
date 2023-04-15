@@ -295,3 +295,15 @@ let ``deserialize to obj`` () =
   test (box "hello") (JsonValue.String "hello")
   test (box 123) (JsonValue.Number (decimal 123))
   test (box 3.14) (JsonValue.Float 3.14)
+
+[<Test>]
+let ``serialize/deserialize JsonValue`` () =
+  test (JsonValue.String "hello") (JsonValue.String "hello")
+  test (JsonValue.Number (decimal 123)) (JsonValue.Number (decimal 123))
+  test (JsonValue.Float 3.14) (JsonValue.Float 3.14)
+
+  let x : Map<string, JsonValue> =
+    """{"hello":{"foo":"bar", "buzz":123}}"""
+    |> JSerde.fromJsonString JSerde.Config.Default
+  let record = JsonValue.Record [| "foo", JsonValue.String "bar"; "buzz", JsonValue.Number (decimal 123) |]
+  Assert.AreEqual (x, Map [ "hello", record ])
